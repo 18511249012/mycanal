@@ -1,0 +1,9 @@
+spring:
+  application:
+    #应用名称
+    name: syndata
+  cloud:
+    config:
+      #config server的地址
+      uri: http://${config.host:192.168.102.165}:${config.port:8888}
+      failFast: true
