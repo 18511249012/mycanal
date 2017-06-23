@@ -12,13 +12,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 
-import com.alibaba.otter.canal.client.CanalConnectors;
-import com.hzcard.syndata.datadeal.AbstractCanalClientScala;
+import com.hzcard.syndata.extractlog.Slaver;
+import com.hzcard.syndata.redis.RedisCache;
 
 import akka.actor.ActorSystem;
 
 /**
  * Created by zhangwei on 2017/3/6.
+ * 看createInstance()
  */
 @Component
 @DependsOn({"mapDataSource","actorSystem"})
@@ -33,6 +34,9 @@ public class CanalClientContextFactoryBean extends AbstractFactoryBean<CanalClie
 
     @Autowired
     private ActorSystem actorSystem;
+
+    @Autowired
+    private RedisCache redis;
 
 
     @Override
@@ -65,18 +69,12 @@ public class CanalClientContextFactoryBean extends AbstractFactoryBean<CanalClie
                     }
                 }
         }
-
+        redis.regiestCanalContext(context);
         for (String destination : canalClientProperties.getDestinations().keySet()) {
             validate(canalClientProperties);
-            validate(canalClientProperties.getDestinations().get(destination));
-
-          AbstractCanalClientScala client  = new AbstractCanalClientScala(destination, CanalConnectors.newClusterConnector(canalClientProperties.getZkServers(), destination, canalClientProperties.getDestinations().get(destination).getUserName(), canalClientProperties.getDestinations().get(destination).getPassword()), actorSystem, context, applicationContext);
-//          AbstractCanalClient client  = new SimpleCanalClient(destination, CanalConnectors.newClusterConnector(canalClientProperties.getZkServers(), destination, canalClientProperties.getDestinations().get(destination).getUserName(), canalClientProperties.getDestinations().get(destination).getPassword()), context);
-          logger.error("init client: {}",client);
-          context.regiestSimpleCanalClient(destination,client);
-          
-        } 
-        context.startClient();
+            Slaver client = new Slaver(canalClientProperties.getDestinations().get(destination),actorSystem,applicationContext,canalClientProperties.getEncryptor(),redis);
+            context.regiestSlaver(destination,client);
+        }
         return context;
     }
 
@@ -90,10 +88,10 @@ public class CanalClientContextFactoryBean extends AbstractFactoryBean<CanalClie
         Assert.notEmpty(canalClientProperties.getSchemas(), "table Repository must not null");
     }
 
-    private void validate(DestinationProperty destinationProperty) {
-        Assert.notNull(destinationProperty.getIncludeSchemas(), "includeSchemas must not null");
-//		Assert.notNull(destinationProperty.getInstanceConfig(), "InstanceConfig not null");
-    }
+//    private void validate(DestinationProperty destinationProperty) {
+//        Assert.notNull(destinationProperty.getIncludeSchemas(), "includeSchemas must not null");
+////		Assert.notNull(destinationProperty.getInstanceConfig(), "InstanceConfig not null");
+//    }
 
     @Override
     protected void destroyInstance(CanalClientContext instance) throws Exception {

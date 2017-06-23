@@ -14,6 +14,8 @@ public class CanalClientProperties {
 
 	private Map<String,SchemaProperty>  schemas;
 
+	private Encryptor encryptor;
+
 
 	public String getZkServers() {
 		return zkServers;
@@ -40,5 +42,13 @@ public class CanalClientProperties {
 
 	public void setSchemas(Map<String, SchemaProperty> schemas) {
 		this.schemas = schemas;
+	}
+
+	public Encryptor getEncryptor() {
+		return encryptor;
+	}
+
+	public void setEncryptor(Encryptor encryptor) {
+		this.encryptor = encryptor;
 	}
 }

@@ -1,0 +1,122 @@
+spring:
+  data:
+    elasticsearch:
+      clusterNodes: ${es.nodes:192.168.102.165:9300}
+      clusterName: hzcard
+      repositories:
+        enabled: true
+  redis:
+    host: 192.168.102.206
+    port: 6379
+    database: 6
+hzcard:
+  syndata:
+    encryptor:
+      timeOut: 500
+    destinations:
+      database1:
+        mysql:
+          myChannel: m193
+          serverId: 193
+          keepalive: 5000
+          host: 192.168.102.193
+          port: 3306
+          user: mycanal
+          password: myCanalTest0503!
+          encryptor: false
+#          whitelist: reorder,points
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+    schemas:
+            reorder:
+              includeSynTables: re_order,re_order_actual,re_order_tour,re_order_virtual,re_operation_order
+              tableRepository:        #es的同步配置
+                re_order:
+                  repository: com.hzcard.syndata.reorder.repositories.ReorderRepository
+                  resetEndPoint: reorder
+                re_operation_order:
+                  repository: com.hzcard.syndata.reorder.repositories.ReoperationOrderRepository
+                  resetEndPoint: reorderOperation
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+            points:
+              includeSynTables: tp_partner_product,tp_point_details,tp_point_event_flow,tp_order_main,tp_order_product,tp_order_point,tp_operation_order_main,tp_operation_order_product,tp_operation_order_point,tp_order_offer_expr
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+            unionauth:
+              includeSynTables: loginuser,userrole,roledef,roleresource,resoucechannel
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              tableRepository:
+                loginuser:
+                  keyword: USERNAME
+                userrole:
+                  keyword: USERNAME,ROLENAME
+                roledef:
+                  keyword: ROLENAME
+                roleresource:
+                  keyword: RESOURCEID,ROLENAME
+                resourcechannel:
+                  keyword: RESOURCEID,CHANNEL
+            crm:
+              includeSynTables: t_user,t_user_extend,t_user_address
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+            partners:
+              includeSynTables: pt_partner,pt_shop
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+            exchange:
+              includeSynTables: re_product
+              sourceDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+              targetDataSource:
+                  driverClassName: com.mysql.jdbc.Driver
+                  username: root
+                  password: root
+                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8

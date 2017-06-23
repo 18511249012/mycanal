@@ -1,39 +1,30 @@
 package com.hzcard.syndata.config.autoconfig;
 
 public class DestinationProperty {
-	
 
 
-//	private Map<String,PhysicalInstanceProperty> instanceConfig;
-	
-	private String userName;
-	
-	private String password;
+    private String includeSchemas;
 
-	private String includeSchemas;
+    /**
+     * 数据库配置
+     */
+    private MysqlClientProperties mysql;
 
 
-	public String getUserName() {
-		return userName;
-	}
+    public String getIncludeSchemas() {
+        return includeSchemas;
+    }
 
-	public void setUserName(String userName) {
-		this.userName = userName;
-	}
+    public void setIncludeSchemas(String includeSchemas) {
+        this.includeSchemas = includeSchemas;
+    }
 
-	public String getPassword() {
-		return password;
-	}
+    public MysqlClientProperties getMysql() {
+        return mysql;
+    }
 
-	public void setPassword(String password) {
-		this.password = password;
-	}
+    public void setMysql(MysqlClientProperties mysql) {
+        this.mysql = mysql;
+    }
 
-	public String getIncludeSchemas() {
-		return includeSchemas;
-	}
-
-	public void setIncludeSchemas(String includeSchemas) {
-		this.includeSchemas = includeSchemas;
-	}
 }

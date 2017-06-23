@@ -3,27 +3,30 @@ package com.hzcard.syndata.datadeal
 import java.sql.SQLException
 
 import akka.actor.Actor
-import akka.actor.Actor.Receive
+import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import com.alibaba.otter.canal.protocol.CanalEntry.EventType
-import org.slf4j.LoggerFactory
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
-import org.springframework.context.annotation.Scope
+import org.springframework.context.annotation.{Lazy, Scope}
 import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup
 import org.springframework.stereotype.Component
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 /**
   * Created by zhangwei on 2017/3/6.
   */
 @Component("dbDealDataActor")
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-class DbDealDataActor extends Actor with MergeOperationArray{
+@Lazy(false)
+class DbDealDataActor extends Actor with MergeOperationArray with RequiresMessageQueue[BoundedMessageQueueSemantics]{
 
+//  val logger = LoggerFactory.getLogger(getClass)
+  val objectMapper = new ObjectMapper()
+  objectMapper.registerModule(DefaultScalaModule)
   override def receive: Receive = {
     case x: DealDataRequest => try {
-      logger.error("DbDealDataActor dealData dataArray length is {},table is {}", x.dataArray.length, x.tableName)
+      val start = System.currentTimeMillis()
+      logger.info(s" start DbDealDataActor data size is ${x.dataArray.size}")
       val newArray = merger(x.dataArray)
       newArray.foreach(data => {
         if (data.get.eventType == EventType.INSERT)
@@ -40,10 +43,15 @@ class DbDealDataActor extends Actor with MergeOperationArray{
         else
           DBOperationScala(x.mapDataSource).delete(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
       })
+      val time = System.currentTimeMillis()-start
+      logger.info(s"end DbDealDataActor ,time ${time}" )
+      if(time>1000L)
+        logger.warn(s"sql execution time to long  ${time}, message = ${objectMapper.writeValueAsString(x)}")
       sender ! true
     }
     catch {
       case el: Throwable => {
+        logger.error(s"dbDealDataActor exception ${el.getMessage}",el)
         sender() ! akka.actor.Status.Failure(el)
         throw el
       }
