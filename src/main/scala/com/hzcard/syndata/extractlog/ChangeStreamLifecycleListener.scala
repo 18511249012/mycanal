@@ -16,21 +16,11 @@ class ChangeStreamLifecycleListener(myChannel: String, redis: RedisCache) extend
 
 //  var runFlag = false
 
+
+
   def onConnect(client: BinaryLogClient) = {
     log.warn(s"MySQL client connected!")
-//    runFlag = true
-//    //启动监听线程
-//    val redisKeepAlive = new Thread("redis-keep-alive" + myChannel) {
-//      override def run(): Unit = {
-//        while (runFlag) {
-//          if (redis.keepAlive(myChannel))
-//            TimeUnit.SECONDS.sleep(5L)
-//          else
-//            runFlag = false;
-//        }
-//      }
-//    }
-//    redisKeepAlive.start()
+
   }
 
   def onDisconnect(client: BinaryLogClient) = {

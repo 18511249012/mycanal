@@ -1,21 +1,20 @@
 package com.hzcard.syndata.datadeal
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.alibaba.otter.canal.protocol.CanalEntry.EventType
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.hzcard.syndata.SpringExtentionImpl
 import com.hzcard.syndata.config.autoconfig.CanalClientProperties
 import com.hzcard.syndata.extractlog.emitter.SourceDataSourceChangeEvent
 import com.hzcard.syndata.redis.RedisCache
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.{Autowired, Qualifier}
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
 import org.springframework.context.ApplicationContext
-import org.springframework.context.annotation.{Lazy, Scope}
+import org.springframework.context.annotation.Scope
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository
 import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup
 import org.springframework.stereotype.Component
@@ -29,15 +28,14 @@ import scala.concurrent.duration._
   */
 @Component("hzcardDataDealActor")
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-@Lazy(false)
-class HzcardDataDealActor(@Autowired val clientProperties: CanalClientProperties, @Autowired val applicationContext: ApplicationContext, @Autowired val redis: RedisCache) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
+class HzcardDataDealActor(@Autowired val clientProperties: CanalClientProperties,
+                         @Autowired applicationContext: ApplicationContext,
+                          @Autowired @Qualifier("dbDealDataActorRef")  actorRef: ActorRef,
+                          @Autowired @Qualifier( "esDealDataActorRef")  esActorRef: ActorRef,
+                          @Autowired mapDataSourceLookup: MapDataSourceLookup,
+                          @Autowired val redis: RedisCache) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
   val log = LoggerFactory.getLogger(getClass)
-  implicit val timeout = Timeout(60 minutes)
-
-  val actorRef = context.actorOf(SpringExtentionImpl(context.system)(applicationContext).props("dbDealDataActor"), "dbDealDataActor")
-  val esActorRef = context.actorOf(SpringExtentionImpl(context.system)(applicationContext).props("esDealDataActor"), "esDealDataActor")
-  val mapDataSourceLookup = applicationContext.getBean("mapDataSource").asInstanceOf[MapDataSourceLookup]
-
+  implicit val timeout = Timeout(30 minutes)
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
 
@@ -59,16 +57,12 @@ class HzcardDataDealActor(@Autowired val clientProperties: CanalClientProperties
       }
       ).reduce(_ ++ _) //转为SchemaTableMapData
         .groupBy(d => (d.schema, d.tableName, d.transId)) //根据schema\tableName\txId分组
-      val dealFuture = datas.map(z => {
+      datas.foreach(z => {
         val metaData = getMetaData(z._1._1, z._1._2)
-        (if (metaData._4) Some(actorRef ? DealDataRequest(mapDataSourceLookup, metaData._1, metaData._2, metaData._3, z._2.toArray)) else None,
-          if (metaData._5) Some(esActorRef ? EsDealDataRequest(metaData._6, mapToEntity(z._2, metaData._7))) else None)
-      })
-      dealFuture.foreach(f => {
-        if (!f._1.isEmpty)
-          Await.result(f._1.get, timeout.duration).asInstanceOf[Boolean]
-        if (!f._2.isEmpty)
-          Await.result(f._2.get, timeout.duration).asInstanceOf[Boolean]
+        if (metaData._4)
+          Await.result(actorRef ? DealDataRequest(mapDataSourceLookup, metaData._1, metaData._2, metaData._3, z._2.toArray), timeout.duration).asInstanceOf[Boolean]
+        if (metaData._5)
+          Await.result(esActorRef ? EsDealDataRequest(metaData._6, mapToEntity(z._2, metaData._7)), timeout.duration).asInstanceOf[Boolean]
       })
       myChannelMap.foreach(bPosition => {
         log.info(s"myChannel= ${bPosition._1},binlogFileName = ${bPosition._2._1},bPosition = ${bPosition._2._2}")

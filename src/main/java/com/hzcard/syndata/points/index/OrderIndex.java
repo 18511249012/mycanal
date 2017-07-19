@@ -150,6 +150,12 @@ public class OrderIndex {
 	@Field(type=FieldType.Double, index = FieldIndex.not_analyzed, store = true)
 	private BigDecimal no_pay_value;
 
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String pos_id;
+
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String cashier_id;
+
 	public String getId() {
 		return id;
 	}
@@ -421,5 +427,20 @@ public class OrderIndex {
 	public void setNo_pay_value(BigDecimal no_pay_value) {
 		this.no_pay_value = no_pay_value;
 	}
-	
+
+	public String getPos_id() {
+		return pos_id;
+	}
+
+	public void setPos_id(String pos_id) {
+		this.pos_id = pos_id;
+	}
+
+	public String getCashier_id() {
+		return cashier_id;
+	}
+
+	public void setCashier_id(String cashier_id) {
+		this.cashier_id = cashier_id;
+	}
 }

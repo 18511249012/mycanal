@@ -43,6 +43,9 @@ public class ReOrder {
 
     @Field(type = FieldType.String, index = FieldIndex.not_analyzed, store = true)
     private String partner_code;
+
+	@Field(type = FieldType.String, index = FieldIndex.not_analyzed, store = true)
+    private String shop_code;
     
     @Field(type = FieldType.String, index = FieldIndex.not_analyzed, store = true)
     private String partner_name;
@@ -143,7 +146,21 @@ public class ReOrder {
     @Field(type = FieldType.String, index = FieldIndex.not_analyzed, store = true)
     private String cash_account;
 
-	public String getId() {
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String pos_id;
+
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String cashier_id;
+
+    public String getShop_code() {
+        return shop_code;
+    }
+
+    public void setShop_code(String shop_code) {
+        this.shop_code = shop_code;
+    }
+
+    public String getId() {
 		return id;
 	}
 	public void setId(String id) {
@@ -370,7 +387,21 @@ public class ReOrder {
 	}
 	public void setCash_account(String cash_account) {
 		this.cash_account = cash_account;
-	} 
-    
-	
+	}
+
+	public String getPos_id() {
+		return pos_id;
+	}
+
+	public void setPos_id(String pos_id) {
+		this.pos_id = pos_id;
+	}
+
+	public String getCashier_id() {
+		return cashier_id;
+	}
+
+	public void setCashier_id(String cashier_id) {
+		this.cashier_id = cashier_id;
+	}
 }

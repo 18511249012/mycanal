@@ -2,23 +2,26 @@ package com.hzcard.syndata.extractlog
 
 import java.io.IOException
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem, Cancellable}
 import com.github.shyiko.mysql.binlog.BinaryLogClient
 import com.hzcard.syndata.config.autoconfig.{DestinationProperty, Encryptor}
 import com.hzcard.syndata.datadeal.BinLogPosition
+import com.hzcard.syndata.extractlog.actors.{HeartDestory, HeartSend}
 import com.hzcard.syndata.redis.RedisCache
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationContext
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 /**
   * Created by zhangwei on 2017/4/27.
   * 看构造函数里的connect()
   */
-class Slaver(clientProperties:DestinationProperty, system: ActorSystem,applicationContext: ApplicationContext, encryptor:Encryptor, redis:RedisCache) {
+class Slaver(clientProperties: DestinationProperty, system: ActorSystem, applicationContext: ApplicationContext, encryptor: Encryptor, redis: RedisCache,clusterActorRef:ActorRef) {
 
   val logger = LoggerFactory.getLogger(classOf[Slaver])
+  private var clusterActorRefSchedel: Option[Cancellable] = None
   protected implicit val ec = system.dispatcher
 
   protected var isPaused = false
@@ -36,55 +39,31 @@ class Slaver(clientProperties:DestinationProperty, system: ActorSystem,applicati
   client.setKeepAliveInterval(clientProperties.getMysql.getKeepalive)
 
   /** Register the objects that will receive `onEvent` calls and deserialize data **/
-  client.registerEventListener(ChangeStreamEventListener(system,applicationContext).setConfig(clientProperties,encryptor))
+  client.registerEventListener(ChangeStreamEventListener(system, applicationContext).setConfig(clientProperties, encryptor))
   client.setEventDeserializer(ChangestreamEventDeserializer)
 
   /** Register the object that will receive BinaryLogClient connection lifecycle events **/
-  client.registerLifecycleListener(ChangeStreamLifecycleListener(clientProperties.getMysql.getMyChannel,redis))
-
-//  connect()
-
-
-  def disconnect() = {
-    if(client.isConnected()) {
-      logger.warn(s"myChannel now disconnect ${clientProperties.getMysql.getMyChannel}")
-      isPaused = true
-      client.disconnect()
-      true
-    }
-    else {
-      false
-    }
-  }
-
-  def reset() = {
-    if(!client.isConnected()) {
-      client.setBinlogFilename(null) //scalastyle:ignore
-      Future { getConnected }
-      true
-    }
-    else {
-      false
-    }
-  }
+  client.registerLifecycleListener(ChangeStreamLifecycleListener(clientProperties.getMysql.getMyChannel, redis))
 
   protected def getConnected = {
     /** Finally, signal the BinaryLogClient to start processing events **/
+    //    monitor.
     logger.info(s"Starting ExtractBinLog...")
-//    redis.regiestRunnerServer(clientProperties.getMysql.getMyChannel)
-    val position = redis.getPosition(clientProperties.getMysql.getMyChannel).getOrElse(BinLogPosition(clientProperties.getMysql.getMyChannel,null,0L))
+    redis.regiestRunnerServer(clientProperties.getMysql.getMyChannel)
+    clusterActorRefSchedel = Some(system.scheduler.schedule(1 minutes, 2 minutes, clusterActorRef, HeartSend(clientProperties.getMysql.getMyChannel))) //每5分钟发送一次我还活着的消息
+    val position = redis.getPosition(clientProperties.getMysql.getMyChannel).getOrElse(BinLogPosition(clientProperties.getMysql.getMyChannel, null, 0L))
     logger.info(s"Starting ExtractBinLog... binLogFileName is ${position.binLogFileName},binLogPosition is ${position.binLogPosition}")
     client.setBinlogFilename(position.binLogFileName)
     client.setBinlogPosition(position.binLogPosition)
 
-    while(!isPaused && !client.isConnected) {
+    while (!isPaused && !client.isConnected) {
       try {
         client.connect()
       }
       catch {
         case e: IOException =>
           logger.error(e.getMessage)
-          logger.error("Failed to connect to MySQL to stream the binlog, retrying...",e)
+          logger.error("Failed to connect to MySQL to stream the binlog, retrying...", e)
           Thread.sleep(5000)
         case e: Exception =>
           logger.error("Failed to connect, exiting.", e)
@@ -93,9 +72,27 @@ class Slaver(clientProperties:DestinationProperty, system: ActorSystem,applicati
   }
 
   def connect() = {
-    if(!client.isConnected()) {
+    if (!client.isConnected()) {
       isPaused = false
-      Future { getConnected }
+      Future {
+        getConnected
+      }
+      true
+    }
+    else {
+      false
+    }
+  }
+
+
+  def disconnect() = {
+    if (client.isConnected()) {
+      System.out.println(s"myChannel now disconnect ${clientProperties.getMysql.getMyChannel}")
+      isPaused = true
+      client.disconnect()
+      clusterActorRef ! HeartDestory(clientProperties.getMysql.getMyChannel)
+      if (!clusterActorRefSchedel.isEmpty)
+        clusterActorRefSchedel.get.cancel()
       true
     }
     else {

@@ -25,45 +25,23 @@ class EmitterActor(config: MysqlClientProperties, applicationContext: Applicatio
   val log = LoggerFactory.getLogger(getClass)
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
-  val cacheMTId = new ArrayBlockingQueue[String](64) //最多缓存64条事务
+  val cacheMTId = new ArrayBlockingQueue[String](32) //最多缓存32条事务
   val cacheMessage = new ConcurrentHashMap[String, SourceDataSourceChangeEvent]
   var isSend = true
-  val bufferSize = 4L
   val hzcardDataDealActor = applicationContext.getBean("hzcardDataDealActorRef").asInstanceOf[ActorRef]
 
-  val sendMessage = new Thread() {
+  val sendMessage = new Thread("emitter-send-thread" + config.getMyChannel) {
     override def run(): Unit = {
-      val toSendMessages = new ArrayBuffer[SourceDataSourceChangeEvent](0)
       while (isSend) {
-        var isPut = true
-        var isSleeped = false
-        while (isPut) {
-          if (toSendMessages.size == bufferSize) {
-            log.warn(s"cacheMessage is full")
-            isPut = false
-          } else {
-            if (isSleeped)
-              isPut = false
-            val txId = cacheMTId.take()
-            if (txId != null) {
-              val signleMessage = cacheMessage.get(txId)
-              if (signleMessage != null) {
-                toSendMessages += signleMessage
-                cacheMessage.remove(txId)
-              }
-              else
-                log.warn(s"cacheMTId  ${txId} , cacheMessage is null")
-            } else if (!isSleeped) {
-              try {
-                TimeUnit.MILLISECONDS.sleep(1L)
-                isSleeped = true
-              } catch {
-                case ie: InterruptedException =>
-              }
-            }
-          }
+        val toSendMessages = new ArrayBuffer[SourceDataSourceChangeEvent](0)
+        val txId = cacheMTId.take()
+        val singleTrans = cacheMessage.get(txId)
+        if (singleTrans != null) {
+          toSendMessages += singleTrans
+          cacheMessage.remove(txId)
         }
-        if (toSendMessages.length > 0) {
+
+        while (toSendMessages.length > 0 && isSend) {
           val future = hzcardDataDealActor ? (toSendMessages.toArray)
           try {
             val isDeal = Await.result(future, timeout.duration).asInstanceOf[Boolean]
@@ -76,12 +54,10 @@ class EmitterActor(config: MysqlClientProperties, applicationContext: Applicatio
               log.error("处理数据失败！，重新发送", x)
           }
         }
-        else
-          TimeUnit.MICROSECONDS.sleep(10)
-
       }
     }
   }
+
   sendMessage.start()
 
   override def receive: Receive = {
@@ -103,8 +79,19 @@ class EmitterActor(config: MysqlClientProperties, applicationContext: Applicatio
         }
       }
       cacheMessage.compute(mutationData.transaction.id, adderSupplier)
-      if (t.get.lastMutationInTransaction) { //事务结束，放入transactionId
-        cacheMTId.offer(mutationData.transaction.id)
+      log.info(s"Received transaction is :${
+        mutationData.transaction.id
+      },transaction lastMutationInTransaction is ${
+        t.get.gtid
+      }:${
+        t.get.lastMutationInTransaction
+      }")
+      if (t.get.lastMutationInTransaction) {
+        //事务结束，放入transactionId
+        cacheMTId.put(mutationData.transaction.id)
+        log.info(s"Received transaction cacheMTId put  :${
+          mutationData.transaction.id
+        }")
       }
     //      TimeUnit.MILLISECONDS.sleep(10L)
     case _ =>

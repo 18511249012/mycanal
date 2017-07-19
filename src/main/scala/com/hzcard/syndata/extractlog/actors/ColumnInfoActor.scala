@@ -103,8 +103,8 @@ class ColumnInfoActor(
         val (ready, stillPending) = bufferedMutations.partition(mutation => columnsInfoCache.get(event.mutation.cacheKey).get.schemaSequence <= mutation.schemaSequence)
         mutationBuffer.put(columnsInfoCache.get(event.mutation.cacheKey).get.cacheKey, stillPending)
         if (ready.size > 0) {
-          if (log.isDebugEnabled)
-            log.debug(s"Adding column info and forwarding ${ready.size} mutations to the ${nextHop.path.name} actor")
+          if (log.isInfoEnabled)
+            log.info(s"Adding column info and forwarding ${ready.size} mutations to the ${nextHop.path.name} actor")
           ready.foreach(nextHop ! _.event.copy(columns = Some(columnsInfoCache.get(event.mutation.cacheKey).get)))
         }
       })

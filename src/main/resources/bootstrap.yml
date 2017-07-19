@@ -5,4 +5,4 @@ spring:
   cloud:
     config:
       #config server的地址
-      failFast: false
+      failFast: true

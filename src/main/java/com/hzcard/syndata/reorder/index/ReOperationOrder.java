@@ -128,6 +128,12 @@ public class ReOperationOrder {
 	@Field(type = FieldType.String, index = FieldIndex.not_analyzed, store = true)
 	private String order_tour_code;
 
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String pos_id;
+
+	@Field(type=FieldType.String, index = FieldIndex.not_analyzed, store = true)
+	private String cashier_id;
+
 	public String getId() {
 		return id;
 	}
@@ -488,6 +494,19 @@ public class ReOperationOrder {
 		this.order_tour_code = order_tour_code;
 	}
 
-	
+	public String getPos_id() {
+		return pos_id;
+	}
 
+	public void setPos_id(String pos_id) {
+		this.pos_id = pos_id;
+	}
+
+	public String getCashier_id() {
+		return cashier_id;
+	}
+
+	public void setCashier_id(String cashier_id) {
+		this.cashier_id = cashier_id;
+	}
 }

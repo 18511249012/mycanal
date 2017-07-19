@@ -14,6 +14,27 @@
             </Policies>
         </RollingFile>
 
+        <RollingFile name="jsonDataLog" filePattern="/var/log/hzcard/jsonDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/jsonDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+        </RollingFile>
+        <RollingFile name="emitterDataLog" filePattern="/var/log/hzcard/emitterDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/emitterDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+        </RollingFile>
+
+
+
         <RollingFile name="transLog"
                      filePattern="/var/log/hzcard/transLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/transLog.log" append="true">
@@ -78,5 +99,12 @@
         <logger name="com.hzcard.syndata.datadeal.MergeOperationArray" level="info">
             <AppenderRef ref="dealDataLog"/>
         </logger>
+        <logger name="com.hzcard.syndata.extractlog.actors.JsonFormatterActor" level="info">
+            <AppenderRef ref="jsonDataLog"/>
+        </logger>
+        <logger name="com.hzcard.syndata.extractlog.emitter.EmitterActor" level="info">
+            <AppenderRef ref="emitterDataLog"/>
+        </logger>
+
     </Loggers>
 </Configuration>

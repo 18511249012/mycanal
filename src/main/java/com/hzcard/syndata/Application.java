@@ -1,62 +1,64 @@
 package com.hzcard.syndata;
 
-import com.hzcard.syndata.config.autoconfig.CanalClientContext;
-import mousio.etcd4j.EtcdClient;
-import mousio.etcd4j.transport.EtcdNettyClient;
-import mousio.etcd4j.transport.EtcdNettyConfig;
+import java.net.URI;
+import java.util.concurrent.TimeUnit;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
-import org.springframework.boot.web.support.SpringBootServletInitializer;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.etcd.EtcdProperties;
-import org.springframework.cloud.etcd.discovery.EtcdDiscoveryClientConfiguration;
-import org.springframework.cloud.etcd.discovery.EtcdLifecycle;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.elasticsearch.repository.config.EnableElasticsearchRepositories;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
-import java.net.URI;
+import mousio.etcd4j.EtcdClient;
+import mousio.etcd4j.transport.EtcdNettyClient;
+import mousio.etcd4j.transport.EtcdNettyConfig;
 
-@SpringBootApplication(exclude = { DataSourceAutoConfiguration.class,DataSourceTransactionManagerAutoConfiguration.class })
+@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class})
 @EnableElasticsearchRepositories(basePackages = "com/hzcard/syndata")
 @EnableTransactionManagement
 @EnableDiscoveryClient
 @ComponentScan("com.hzcard")
-public class Application   implements CommandLineRunner{
+public class Application implements CommandLineRunner {
 
-	public static void main(String[] args) throws ClassNotFoundException {
-		SpringApplication.run(Application.class, args);
-	}
+    private static final Logger logger = LoggerFactory.getLogger(Application.class);
 
-	@Autowired
-	EtcdProperties etcdProperties;
+    public static void main(String[] args) throws ClassNotFoundException {
+        ConfigurableApplicationContext context = SpringApplication.run(Application.class, args);
+    }
 
-	@Bean
-	public EtcdClient etcdClient() {
-		EtcdNettyConfig config = new EtcdNettyConfig();
-		config.setMaxFrameSize(1024 * 1024); // Desired max size
-		EtcdNettyClient nettyClient = new EtcdNettyClient(config, etcdProperties.getUris().toArray(new URI[] {}));
-		return new EtcdClient(nettyClient);
-	}
+    @Autowired
+    EtcdProperties etcdProperties;
 
-	@Autowired
-	CanalClientContext canalClientContext;
+    @Bean
+    public GracefulShutdown gracefulShutdown(){
+        return new GracefulShutdown(2L,TimeUnit.SECONDS);
+    }
 
-	Logger logger = LoggerFactory.getLogger(Application.class);
-	@Override
-	public void run(String... args) throws Exception {
-		logger.info("runner canalClientContext start");
-		canalClientContext.start();
-	}
+    @Bean
+    public EtcdClient etcdClient() {
+        EtcdNettyConfig config = new EtcdNettyConfig();
+        config.setMaxFrameSize(1024 * 1024); // Desired max size
+        EtcdNettyClient nettyClient = new EtcdNettyClient(config, etcdProperties.getUris().toArray(new URI[]{}));
+        return new EtcdClient(nettyClient);
+    }
+
+    @Autowired
+    CanalClientContext canalClientContext;
+
+
+    @Override
+    public void run(String... args) throws Exception {
+        logger.info("runner canalClientContext start");
+        canalClientContext.start();
+    }
 }

@@ -1,7 +1,5 @@
 package com.hzcard.syndata.config.autoconfig;
 
-import akka.actor.ActorRef;
-import akka.actor.ActorSystem;
 import org.apache.tomcat.jdbc.pool.PoolProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.embedded.EmbeddedServletContainerInitializedEvent;
@@ -13,7 +11,7 @@ import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup;
 
 @Configuration
 @EnableConfigurationProperties(CanalClientProperties.class)
-public class CanalClientInstanceAutoConfig  implements ApplicationListener<EmbeddedServletContainerInitializedEvent> {
+public class CanalClientInstanceAutoConfig implements ApplicationListener<EmbeddedServletContainerInitializedEvent> {
 
     @Autowired
     private CanalClientProperties canalClientProperties;
@@ -65,7 +63,7 @@ public class CanalClientInstanceAutoConfig  implements ApplicationListener<Embed
 
     @Override
     public void onApplicationEvent(EmbeddedServletContainerInitializedEvent event) {
-        this.serverPort = event.getEmbeddedServletContainer().getPort();
+    	CanalClientInstanceAutoConfig.serverPort = event.getEmbeddedServletContainer().getPort();
     }
 
     public static int getPort() {

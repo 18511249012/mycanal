@@ -22,7 +22,7 @@ trait MergeOperationArray {
       }) {
         val lastArray = newArray.takeRight(1)
         var tempNew: Option[SchemaTableMapBatchData] = None
-        if (lastArray.length == 0 || lastArray(0).get.eventType != esChangeArray(i).eventType || lastArray(0).get.rowChanges.length >= 1000) {
+        if (lastArray.length == 0 || lastArray(0).get.eventType != esChangeArray(i).eventType || lastArray(0).get.rowChanges(0).size !=  esChangeArray(i).rowChange.size || lastArray(0).get.rowChanges.length >= 1000) {
           val schema = esChangeArray(i).schema
           val tableName = esChangeArray(i).tableName
           val rowChange = esChangeArray(i).rowChange
@@ -44,7 +44,7 @@ trait MergeOperationArray {
                 val nextEventType = esChangeArray(j).eventType
                 val rowChange = esChangeArray(j).rowChange
                 try {
-                  if (tempNewEventType == nextEventType && tempNew.get.rowChanges.length < 1000)
+                  if (tempNewEventType == nextEventType && tempNew.get.rowChanges(0).size==rowChange.size  && tempNew.get.rowChanges.length < 1000)
                     tempNew.get.rowChanges += rowChange
                   else
                     notInsert = true

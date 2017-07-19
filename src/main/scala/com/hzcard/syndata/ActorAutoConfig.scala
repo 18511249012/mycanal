@@ -22,6 +22,26 @@ class ActorAutoConfig(@Autowired val applicationContext: ApplicationContext) {
   @Bean(name = Array("hzcardDataDealActorRef"))
   @DependsOn(Array("actorSystem"))
   def hzcardDetaDeal: ActorRef = {
-    actorSystem.actorOf(SpringExtentionImpl(actorSystem)(applicationContext).props("hzcardDataDealActor"), "hzcardDataDealActor")
+    actorSystem.actorOf(SpringExtentionImpl(actorSystem)(applicationContext).props("hzcardDataDealActor"), "hzcardDataDealActorRef")
   }
+
+  @Bean(name = Array("dbDealDataActorRef"))
+  @DependsOn(Array("actorSystem"))
+  def dbDealDataActorRef: ActorRef = {
+    actorSystem.actorOf(SpringExtentionImpl(actorSystem)(applicationContext).props("dbDealDataActor"), "dbDealDataActorRef")
+  }
+
+  @Bean(name = Array("esDealDataActorRef"))
+  @DependsOn(Array("actorSystem"))
+  def esDealDataActorRef: ActorRef = {
+    actorSystem.actorOf(SpringExtentionImpl(actorSystem)(applicationContext).props("esDealDataActor"), "esDealDataActorRef")
+  }
+
+  @Bean(name = Array("clusterActorRef"))
+  @DependsOn(Array("actorSystem"))
+  def clusterActorRef: ActorRef = {
+    actorSystem.actorOf(SpringExtentionImpl(actorSystem)(applicationContext).props("clusterActor"), "clusterActorRef")
+  }
+
+
 }
