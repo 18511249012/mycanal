@@ -16,7 +16,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 
-@Document(indexName="reorder",type = "re_order",createIndex=true)
+@Document(indexName="reorder",type = "re_order")
 public class ReOrder {
 
 	@JsonCreator

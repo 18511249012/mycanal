@@ -18,10 +18,9 @@ import scala.concurrent.duration._
   * Created by zhangwei on 2017/4/27.
   * 看构造函数里的connect()
   */
-class Slaver(clientProperties: DestinationProperty, system: ActorSystem, applicationContext: ApplicationContext, encryptor: Encryptor, redis: RedisCache,clusterActorRef:ActorRef) {
+class Slaver(clientProperties: DestinationProperty, system: ActorSystem, applicationContext: ApplicationContext, redis: RedisCache) {
 
   val logger = LoggerFactory.getLogger(classOf[Slaver])
-  private var clusterActorRefSchedel: Option[Cancellable] = None
   protected implicit val ec = system.dispatcher
 
   protected var isPaused = false
@@ -33,24 +32,27 @@ class Slaver(clientProperties: DestinationProperty, system: ActorSystem, applica
     clientProperties.getMysql.getPassword
   )
 
-  client.setServerId(clientProperties.getMysql.getServerId)
+  client.setServerId(System.currentTimeMillis())
 
   /** If we lose the connection to the server retry every `changestream.mysql.keepalive` milliseconds. **/
   client.setKeepAliveInterval(clientProperties.getMysql.getKeepalive)
 
   /** Register the objects that will receive `onEvent` calls and deserialize data **/
-  client.registerEventListener(ChangeStreamEventListener(system, applicationContext).setConfig(clientProperties, encryptor))
+  client.registerEventListener(ChangeStreamEventListener(system, applicationContext,clientProperties))
   client.setEventDeserializer(ChangestreamEventDeserializer)
 
   /** Register the object that will receive BinaryLogClient connection lifecycle events **/
   client.registerLifecycleListener(ChangeStreamLifecycleListener(clientProperties.getMysql.getMyChannel, redis))
 
+//  val clusterActorRef = applicationContext.getBean("clusterActorRef").asInstanceOf[ActorRef]
+
   protected def getConnected = {
     /** Finally, signal the BinaryLogClient to start processing events **/
     //    monitor.
     logger.info(s"Starting ExtractBinLog...")
-    redis.regiestRunnerServer(clientProperties.getMysql.getMyChannel)
-    clusterActorRefSchedel = Some(system.scheduler.schedule(1 minutes, 2 minutes, clusterActorRef, HeartSend(clientProperties.getMysql.getMyChannel))) //每5分钟发送一次我还活着的消息
+//    redis.regiestRunnerServer(clientProperties.getMysql.getMyChannel)
+//    clusterActorRefSchedel = Some(system.scheduler.schedule(1 minutes, 2 minutes, clusterActorRef, HeartSend(clientProperties.getMysql.getMyChannel))) //每2分钟发送一次我还活着的消息
+
     val position = redis.getPosition(clientProperties.getMysql.getMyChannel).getOrElse(BinLogPosition(clientProperties.getMysql.getMyChannel, null, 0L))
     logger.info(s"Starting ExtractBinLog... binLogFileName is ${position.binLogFileName},binLogPosition is ${position.binLogPosition}")
     client.setBinlogFilename(position.binLogFileName)
@@ -90,9 +92,9 @@ class Slaver(clientProperties: DestinationProperty, system: ActorSystem, applica
       System.out.println(s"myChannel now disconnect ${clientProperties.getMysql.getMyChannel}")
       isPaused = true
       client.disconnect()
-      clusterActorRef ! HeartDestory(clientProperties.getMysql.getMyChannel)
-      if (!clusterActorRefSchedel.isEmpty)
-        clusterActorRefSchedel.get.cancel()
+//      clusterActorRef ! HeartDestory(clientProperties.getMysql.getMyChannel)
+//      if (!clusterActorRefSchedel.isEmpty)
+//        clusterActorRefSchedel.get.cancel()
       true
     }
     else {

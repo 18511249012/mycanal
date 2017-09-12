@@ -26,7 +26,6 @@ class ChangeStreamLifecycleListener(myChannel: String, redis: RedisCache) extend
   def onDisconnect(client: BinaryLogClient) = {
     log.warn(s"MySQL binlog client was disconnected. ${myChannel}")
 //    runFlag = false
-    redis.unRegiestSelfRunnerServer(myChannel)
   }
 
   def onEventDeserializationFailure(client: BinaryLogClient, ex: Exception) = {

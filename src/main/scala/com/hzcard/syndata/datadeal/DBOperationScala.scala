@@ -5,12 +5,14 @@ import java.sql.{Connection, PreparedStatement, SQLException}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.slf4j.{Logger, LoggerFactory}
+import org.springframework.dao.DuplicateKeyException
 import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup
 
 import scala.collection.mutable
 
 object DBOperationScala {
   def apply(sources: MapDataSourceLookup): DBOperationScala = new DBOperationScala(sources)
+
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
 }
@@ -67,11 +69,11 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
     }
     catch {
       case e: SQLException => {
-        logger.error(s"delete execute sql is ${sql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(maps)}",e)
+        logger.error(s"delete execute sql is ${sql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(maps)}", e)
         throw e
       }
-      case e:Throwable =>{
-        logger.error(s"delete execute sql is ${sql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(maps)}",e)
+      case e: Throwable => {
+        logger.error(s"delete execute sql is ${sql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(maps)}", e)
         throw e
       }
     } finally {
@@ -93,6 +95,7 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
     var preparedStatement: PreparedStatement = null
     val strSql: StringBuilder = new StringBuilder("insert into " + schema + "." + tableName + "(")
     try {
+
       conn = sources.getDataSource("target" + schema).getConnection
 
       for (key <- map(0).keySet) {
@@ -107,14 +110,10 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
       strSql.deleteCharAt(strSql.length - 1)
       strSql.append(")")
 
-      if (logger.isDebugEnabled) {
-        logger.debug("insert sql is: {}", strSql.toString())
-        logger.debug(s"insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}")
-      }
       //      if (logger.isInfoEnabled) logger.info("insert sql is: {}" , strSql.toString)
       preparedStatement = conn.prepareStatement(strSql.toString)
       //      logger.error(" table {} insert batch size is {}",tableName,map.size)
-      val startTime = System.currentTimeMillis()
+      var startTime = System.currentTimeMillis()
       for (objMap <- map) {
         var i: Int = 1
         for (key <- objMap.keySet) {
@@ -123,22 +122,18 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
         }
         preparedStatement.addBatch()
       }
+      startTime = System.currentTimeMillis()
       preparedStatement.executeBatch()
-      //      logger.error(" table {} insert batch end time {} ",tableName,(System.currentTimeMillis()-startTime))
       true
     }
     catch {
-      case e: SQLException => {
-        //			Duplicate
-//        logger.error(e.getMessage + " error table is:" + tableName + ",error data key is:" + map(0).get("id").getOrElse("notId"), e)
-        if (e.getMessage.indexOf("Duplicate entry") < 0)
-          logger.error(s"insert execute sql is ${strSql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}",e)
-        throw e
-      }
-      case e:Throwable =>{
-        logger.error(s"insert execute sql is ${strSql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}",e)
-        throw e
-      }
+      case e: Throwable =>
+        if (e.getMessage.indexOf("Duplicate entry") < 0) {
+          logger.error(s"insert execute sql is ${strSql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}", e)
+          throw e
+        }else
+          true
+
     } finally {
       preparedStatement.close()
       conn.close()
@@ -157,7 +152,8 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
         if (!keyword.split(",").contains(key))
           strSql.append(key + " = ?,")
       }
-      strSql.deleteCharAt(strSql.toString.trim.length - 1)
+      strSql
+        .deleteCharAt(strSql.toString.trim.length - 1)
       strSql.append(" where ")
 
       for (key <- keyword.split(","))
@@ -189,12 +185,13 @@ class DBOperationScala(val sources: MapDataSourceLookup) {
         }
         preparedStatement.addBatch()
       }
-      preparedStatement.executeBatch()
+      preparedStatement
+        .executeBatch()
       //      logger.error(" table {} update batch end time {}",tableName,(System.currentTimeMillis()-startTime))
       true
     } catch {
-      case e:Throwable =>{
-        logger.error(s"update execute sql is ${strSql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}",e)
+      case e: Throwable => {
+        logger.error(s"update execute sql is ${strSql},insert datamap is: ${DBOperationScala.objectMapper.writeValueAsString(map)}", e)
         throw e
       }
     } finally {

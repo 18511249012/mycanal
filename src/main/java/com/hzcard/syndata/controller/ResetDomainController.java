@@ -63,55 +63,57 @@ public class ResetDomainController {
         Connection conn = null;
         try {
             for (String schema : clientPropertis.getSchemas().keySet()) {
-                for (String tableName : clientPropertis.getSchemas().get(schema).getTableRepository().keySet()) {
-                    TableRepository table = clientPropertis.getSchemas().get(schema).getTableRepository()
-                            .get(tableName);
-                    if (table.getResetEndPoint().equals(reporsitory)) {
-                        // 查询数据库
-                        DataSource dataSource = sources.getDataSource("source" + schema);
-                        conn = dataSource.getConnection();
+                if (clientPropertis.getSchemas().get(schema).getTableRepository() != null)
+                    for (String tableName : clientPropertis.getSchemas().get(schema).getTableRepository().keySet()) {
+                        TableRepository table = clientPropertis.getSchemas().get(schema).getTableRepository()
+                                .get(tableName);
+                        if (table != null && table.getResetEndPoint() != null)
+                            if (table.getResetEndPoint().equals(reporsitory)) {
+                                // 查询数据库
+                                DataSource dataSource = sources.getDataSource("source" + schema);
+                                conn = dataSource.getConnection();
 
-                        Statement stm = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
-                        String sql = "select * from " + schema + "." + tableName + " Order By ID ASC";
-                        if ("com.hzcard.syndata.points.repositories.OperationOrderRepository".equals(table.getRepository()) || "com.hzcard.syndata.points.repositories.OrderRepository".equals(table.getRepository()))
-                            sql = "select *,code as code_search,card_no as card_no_search from " + schema + "." + tableName + " Order By ID ASC";
-                        String sqlCount = "select count(1) from " + schema + "." + tableName;
-                        ResultSet set = stm.executeQuery(sqlCount);
-                        int dataCount = 0;
-                        while (set.next()) {
-                            dataCount = set.getInt(1);
-                        }
-                        int totalPageNum = (dataCount + PAGE_SIZE - 1) / PAGE_SIZE;
+                                Statement stm = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
+                                String sql = "select * from " + schema + "." + tableName + " Order By ID ASC";
+                                if ("com.hzcard.syndata.points.repositories.OperationOrderRepository".equals(table.getRepository()) || "com.hzcard.syndata.points.repositories.OrderRepository".equals(table.getRepository()))
+                                    sql = "select *,code as code_search,card_no as card_no_search from " + schema + "." + tableName + " Order By ID ASC";
+                                String sqlCount = "select count(1) from " + schema + "." + tableName;
+                                ResultSet set = stm.executeQuery(sqlCount);
+                                int dataCount = 0;
+                                while (set.next()) {
+                                    dataCount = set.getInt(1);
+                                }
+                                int totalPageNum = (dataCount + PAGE_SIZE - 1) / PAGE_SIZE;
 
-                        // "+clientPropertis.getDestinations().get(key)\
-                        set.close();
-                        stm.close();
-                        conn.close();
-                        for (int pageNum = 1; pageNum <= totalPageNum; pageNum++) {
-                            conn = dataSource.getConnection();
-                            stm = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
-                            stm.setFetchSize(PAGE_SIZE);
-                            stm.setMaxRows(PAGE_SIZE);
-                            set = stm.executeQuery(sql + " Limit " + (pageNum - 1) * PAGE_SIZE + ", " + PAGE_SIZE);
-                            ClassTypeInformation cT = ClassTypeInformation.from(repositoryClass); // 解析获得domaiin
-                            List<TypeInformation<?>> arguments = cT.getSuperTypeInformation(Repository.class)
-                                    .getTypeArguments();
-                            BeanPropertyRowMapper dd = new BeanPropertyRowMapper(arguments.get(0).getType()); // domain\BeanPropertyRowMapper
-                            int rowNum = 0;
-                            List results = new ArrayList();
-                            while (set.next()) {
-                                results.add(dd.mapRow(set, rowNum++));
+                                // "+clientPropertis.getDestinations().get(key)\
+                                set.close();
+                                stm.close();
+                                conn.close();
+                                for (int pageNum = 1; pageNum <= totalPageNum; pageNum++) {
+                                    conn = dataSource.getConnection();
+                                    stm = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
+                                    stm.setFetchSize(PAGE_SIZE);
+                                    stm.setMaxRows(PAGE_SIZE);
+                                    set = stm.executeQuery(sql + " Limit " + (pageNum - 1) * PAGE_SIZE + ", " + PAGE_SIZE);
+                                    ClassTypeInformation cT = ClassTypeInformation.from(repositoryClass); // 解析获得domaiin
+                                    List<TypeInformation<?>> arguments = cT.getSuperTypeInformation(Repository.class)
+                                            .getTypeArguments();
+                                    BeanPropertyRowMapper dd = new BeanPropertyRowMapper(arguments.get(0).getType()); // domain\BeanPropertyRowMapper
+                                    int rowNum = 0;
+                                    List results = new ArrayList();
+                                    while (set.next()) {
+                                        results.add(dd.mapRow(set, rowNum++));
+                                    }
+                                    ElasticsearchRepository rep = (ElasticsearchRepository) applicationContext
+                                            .getBean(repositoryClass);
+                                    rep.save(results); // 存储es
+                                    set.close();
+                                    stm.close();
+                                    conn.close();
+                                }
                             }
-                            ElasticsearchRepository rep = (ElasticsearchRepository) applicationContext
-                                    .getBean(repositoryClass);
-                            rep.save(results); // 存储es
-                            set.close();
-                            stm.close();
-                            conn.close();
-                        }
-                    }
 
-                }
+                    }
             }
         } catch (SQLException e) {
             logger.error("数据库操作失败", e);

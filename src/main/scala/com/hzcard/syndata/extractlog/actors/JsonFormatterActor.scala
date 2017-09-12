@@ -2,14 +2,13 @@ package com.hzcard.syndata.extractlog.actors
 
 import java.text.{DateFormat, SimpleDateFormat}
 import java.util.TimeZone
-import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import akka.actor.SupervisorStrategy.Restart
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, OneForOneStrategy}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
-import akka.util.Timeout
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.hzcard.syndata.config.autoconfig.{Encryptor, MysqlClientProperties}
+import com.hzcard.syndata.config.autoconfig.MysqlClientProperties
 import com.hzcard.syndata.extractlog.emitter.{MutationData, QueryInfo, Transaction}
 import com.hzcard.syndata.extractlog.events.{MutationWithInfo, Update}
 import org.slf4j.LoggerFactory
@@ -17,8 +16,8 @@ import spray.json._
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
-import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.concurrent.duration._
 
 object JsonFormatterActor {
   val dateFormatter: DateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
@@ -28,27 +27,31 @@ object JsonFormatterActor {
 
 class JsonFormatterActor(
                           getNextHop: ActorRefFactory => ActorRef,
-                          config: MysqlClientProperties,
-                          encryptorConfig: Encryptor
-                        ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
+                          config: MysqlClientProperties
+                        ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ActorLogging{
 
   protected val nextHop = getNextHop(context)
-  protected val log = LoggerFactory.getLogger(getClass)
 
   protected val includeData = config.getIncludeData
   protected val encryptData = if (!includeData) false else config.getEncryptor.booleanValue()
 
-  protected lazy val encryptorActor = context.actorOf(Props(new EncryptorActor(encryptorConfig)), name = "encryptorActor" + config.getMyChannel)
-  protected implicit val TIMEOUT = Timeout(encryptorConfig.getTimeOut.longValue() milliseconds)
-  protected implicit val ec = context.dispatcher
-
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    super.preRestart(reason, message)
+    log.error(reason.getMessage,reason)
+    self ! message
+  }
+
+  override def supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+    case _: Exception                => Restart
+  }
+
   def receive = {
     case message: MutationWithInfo if message.columns.isDefined => {
-      if (log.isInfoEnabled)
-        log.info(s"Received ${message.mutation} for table ${message.mutation.database}.${message.mutation.tableName}")
+      if (log.isDebugEnabled)
+        log.debug(s"Received ${message.mutation} for table ${message.mutation.database}.${message.mutation.tableName}")
       val primaryKeys = message.columns.get.columns.collect({ case col if col.isPrimary => col.name })
       val rowData = getRowData(message)
       val oldRowData = getOldRowData(message)
@@ -58,7 +61,7 @@ class JsonFormatterActor(
         val pkInfo = mutable.LinkedHashMap(primaryKeys.map({
           case k: String => k -> row.getOrElse(k, JsNull)
         }): _*)
-        val transaction = (message.transaction.get.lastMutationInTransaction) match {
+        val transaction = (idx == rowData.length - 1) match {
           case true => Transaction(message.transaction.get.gtid, true, Some(message.transaction.get.rowCount))
           case false => Transaction(message.transaction.get.gtid, false)
         }
@@ -66,7 +69,6 @@ class JsonFormatterActor(
           QueryInfo(message.mutation.timestamp, message.mutation.sql.getOrElse(""), rowData.length, idx + 1), pkInfo, transaction, row, oldRow.getOrElse(mutable.LinkedHashMap.empty)
         )
         nextHop ! message.copy(mutationData = mutationData, formattedMessage = Some(""))
-//        TimeUnit.MILLISECONDS.sleep(10L)
       })
     }
   }
@@ -79,6 +81,7 @@ class JsonFormatterActor(
       mutable.LinkedHashMap(columns.indices.map({
         case idx if mutation.includedColumns.get(idx) =>
           columns(idx).name -> row(idx)
+        case idx if !mutation.includedColumns.get(idx) => log.error(s"columns ${columns(idx).name}"); columns(idx).name -> null
       }): _*)
     )
   }
@@ -93,6 +96,7 @@ class JsonFormatterActor(
           mutable.LinkedHashMap(columns.indices.map({
             case idx if mutation.includedColumns.get(idx) =>
               columns(idx).name -> row(idx)
+            case idx if !mutation.includedColumns.get(idx) => log.error(s"columns ${columns(idx).name}"); columns(idx).name -> null
           }): _*)
         ))
       case _ => None

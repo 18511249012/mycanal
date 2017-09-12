@@ -1,68 +1,114 @@
 package com.hzcard.syndata.datadeal
 
-import java.sql.SQLException
-
-import akka.actor.Actor
+import akka.actor.SupervisorStrategy.Restart
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, OneForOneStrategy}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
-import akka.pattern.pipe
 import com.alibaba.otter.canal.protocol.CanalEntry.EventType
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.springframework.beans.factory.config.ConfigurableBeanFactory
-import org.springframework.context.annotation.Scope
+import com.hzcard.syndata.config.autoconfig.CanalClientProperties
+import org.springframework.context.ApplicationContext
 import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup
-import org.springframework.stereotype.Component
 
-import scala.concurrent.Future
+import scala.concurrent.duration._
 
 /**
   * Created by zhangwei on 2017/3/6.
   */
-@Component("dbDealDataActor")
-@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
-class DbDealDataActor extends Actor with MergeOperationArray with RequiresMessageQueue[BoundedMessageQueueSemantics]{
 
-//  val logger = LoggerFactory.getLogger(getClass)
+class DbDealDataActor(getNextHop: ActorRefFactory => ActorRef,
+                      applicationContext: ApplicationContext) extends Actor with MergeOperationArray with ActorLogging with RequiresMessageQueue[BoundedMessageQueueSemantics]{
+
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
-  import context.dispatcher
-  override def receive: Receive = {
-    case x: DealDataRequest => try {
-      Future {
-        val start = System.currentTimeMillis()
-        logger.info(s" start DbDealDataActor data size is ${x.dataArray.size}")
-        val newArray = merger(x.dataArray)
-        newArray.foreach(data => {
-          if (data.get.eventType == EventType.INSERT)
-            try {
-              DBOperationScala(x.mapDataSource).save(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
-            } catch {
-              case e: SQLException => {
-                if (e.getMessage.indexOf("Duplicate entry") < 0)
-                  throw e
-              }
-            }
-          else if (data.get.eventType == EventType.UPDATE)
-            DBOperationScala(x.mapDataSource).update(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
-          else
-            DBOperationScala(x.mapDataSource).delete(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
-        })
-        val time = System.currentTimeMillis() - start
-        logger.info(s"end DbDealDataActor ,time ${time}")
-        if (time > 1000L)
-          logger.warn(s"sql execution time to long  ${time}, message = ${objectMapper.writeValueAsString(x)}")
-        true
-      } pipeTo sender()
+  val getNextActor = getNextHop(context)
+  val clientProperties = applicationContext.getBean(classOf[CanalClientProperties])
+  val mapDataSourceLookup = applicationContext.getBean(classOf[MapDataSourceLookup])
+
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    super.preRestart(reason, message)
+    log.error(reason.getMessage,reason)
+    if(!message.isEmpty && message.get.isInstanceOf[DealDataRequestModel]){   //遇到了异常，重启的时候，重复处理数据，需要注意死循环
+      dealDataRequestModel(message.get.asInstanceOf[DealDataRequestModel])
     }
-    catch {
-      case el: Throwable => {
-        logger.error(s"dbDealDataActor exception ${el.getMessage}",el)
-        sender() ! akka.actor.Status.Failure(el)
-        throw el
+  }
+
+  override def receive: Receive = {
+    case x: DealDataRequestModel => dealDataRequestModel(x)
+    case x: BinLogPosition => getNextActor ! x
+    case x =>
+      throw new RuntimeException(s"Received invalid message.")
+  }
+
+
+//  override def supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+//    case _: Exception                => Restart
+//  }
+
+  def dealDataRequestModel(x: DealDataRequestModel)  {
+    val startTime = System.currentTimeMillis()
+    val metaData = getMetaData(x.data._1._1, x.data._1._2)
+    if (metaData._4) {
+      val data = DealDataRequest(mapDataSourceLookup, metaData._1, metaData._2, metaData._3, x.data._2, x.txId)
+      dbDeal(data)
+    }
+    if(log.isInfoEnabled)
+      log.info(s"操作数据库 ${x.data._1._1}.${x.data._1._2} 耗时 ${System.currentTimeMillis() - startTime}")
+    getNextActor ! x
+  }
+
+  def dbDeal(x: DealDataRequest): Unit = try {
+    val newArray = merger(x.dataArray)
+    for (data <- newArray) {
+      if (data.get.eventType == EventType.INSERT) {
+        DBOperationScala(x.mapDataSource).save(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
+
+      } else if (data.get.eventType == EventType.UPDATE) {
+        DBOperationScala(x.mapDataSource).update(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
+
+
+      } else {
+        DBOperationScala(x.mapDataSource).delete(x.schema, x.tableName, x.keyword, data.get.rowChanges.toArray)
       }
     }
-    case _ => sender ! NotMatchMessage
+  } catch {
+    case el: Throwable => {
+      log.error(s"dbDealDataActor exception ${el.getMessage}", el)
+      throw el
+    }
+  }
+  def getMetaData(schema: String, tableName: String) = {
+    var keyWord = "id"
+    var isSynTable = false
+    val includeSynTablesStr = {
+      if (clientProperties.getSchemas.get(schema) != null)
+        clientProperties.getSchemas.get(schema).getIncludeSynTables
+      else null
+    }
+    val includeSynTables: Array[String] = {
+      if (includeSynTablesStr != null)
+        includeSynTablesStr.split(",")
+      else
+        null
+    }
+    if (includeSynTables == null || includeSynTables.length == 0)
+      isSynTable = false
+    else
+      for (includeSynTable <- includeSynTables) {
+        if (includeSynTable.equalsIgnoreCase(tableName))
+          isSynTable = true
+      }
+    if (clientProperties.getSchemas.get(schema) != null
+      && clientProperties.getSchemas.get(schema).getTableRepository != null
+      && clientProperties.getSchemas.get(schema).getTableRepository.get(tableName) != null)
+      keyWord = if (clientProperties.getSchemas.get(schema).getTableRepository.get(tableName).getKeyword == null) "id" else clientProperties.getSchemas.get(schema).getTableRepository.get(tableName).getKeyword
+    (schema, tableName, keyWord, isSynTable)
   }
 }
 
-case class DealDataRequest(override val mapDataSource: MapDataSourceLookup, schema: String, tableName: String, keyword: String, dataArray: Array[SchemaTableMapData]) extends ParentRequest(mapDataSource)
+case class DealDataRequest(override val mapDataSource: MapDataSourceLookup, schema: String, tableName: String, keyword: String, dataArray: Array[SchemaTableMapData], txId: String) extends ParentRequest(mapDataSource)
+
+case class TransComplete(txId: String, isEsDeal: Boolean)
+
+case class RetryNeed(txId: String)

@@ -22,9 +22,9 @@ import org.springframework.util.{Assert, ClassUtils}
   */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-@DependsOn(Array("actorSystem","clusterActorRef","redisCache"))
+@DependsOn(Array("actorSystem","redisCache"))
 class CanalClientContext(@Autowired redis: RedisCache, @Autowired actorSystem: ActorSystem,
-                         @Autowired canalClientProperties: CanalClientProperties, @Autowired @Qualifier("clusterActorRef") clusterActorRef: ActorRef,
+                         @Autowired canalClientProperties: CanalClientProperties,
                          @Autowired applicationContext: ApplicationContext) {
   private val logger = LoggerFactory.getLogger(classOf[CanalClientContext])
 
@@ -40,13 +40,15 @@ class CanalClientContext(@Autowired redis: RedisCache, @Autowired actorSystem: A
     canalClientProperties.getSchemas.asScala.filter(x => x._2 != null).
       filter(x => x._2.getTableRepository != null).
       map(x => x._2.getTableRepository).
-      flatMap(x => x.values).filter(x=>x.getRepository!=null).foreach(x => {
-      resetEndPoint.computeIfAbsent(x.getRepository, new java.util.function.Function[String, Class[_]] {
+      flatMap(x => x.values).
+      filter(x=>x.getRepository!=null).
+      foreach(x => {
+      resetEndPoint.computeIfAbsent(x.getResetEndPoint, new java.util.function.Function[String, Class[_]] {
         override def apply(t: String): Class[_] = ClassUtils.forName(x.getRepository, applicationContext.getClassLoader)
       })
     })
     canalClientProperties.getDestinations.asScala.
-      foreach(x => clients.put(x._1, new Slaver(x._2, actorSystem, applicationContext, canalClientProperties.getEncryptor, redis, clusterActorRef)))
+      foreach(x => clients.put(x._1, new Slaver(x._2, actorSystem, applicationContext, redis)))
   }
 
   @PreDestroy

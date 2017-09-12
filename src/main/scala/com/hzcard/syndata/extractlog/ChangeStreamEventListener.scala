@@ -1,11 +1,11 @@
 package com.hzcard.syndata.extractlog
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorRefFactory, ActorSystem, Props}
 import com.github.shyiko.mysql.binlog.BinaryLogClient.EventListener
 import com.github.shyiko.mysql.binlog.event.EventType._
 import com.github.shyiko.mysql.binlog.event._
 import com.hzcard.syndata.config.autoconfig.{DestinationProperty, Encryptor}
-import com.hzcard.syndata.extractlog.actors.{ColumnInfoActor, JsonFormatterActor, TransactionActor}
+import com.hzcard.syndata.extractlog.actors._
 import com.hzcard.syndata.extractlog.emitter.EmitterActor
 import com.hzcard.syndata.extractlog.events._
 import org.apache.commons.lang.StringUtils
@@ -14,44 +14,23 @@ import org.springframework.context.ApplicationContext
 
 
 object ChangeStreamEventListener {
-  def apply(system: ActorSystem, applicationContext: ApplicationContext): ChangeStreamEventListener = new ChangeStreamEventListener(system, applicationContext)
+  def apply(system: ActorSystem, applicationContext: ApplicationContext,clientProperties: DestinationProperty): ChangeStreamEventListener = new ChangeStreamEventListener(system, applicationContext,clientProperties)
 }
 
-class ChangeStreamEventListener(system: ActorSystem, val applicationContext: ApplicationContext) extends EventListener {
+class ChangeStreamEventListener(system: ActorSystem, val applicationContext: ApplicationContext,clientProperties: DestinationProperty) extends EventListener {
   protected val log = LoggerFactory.getLogger(getClass)
   protected val systemDatabases = Seq("information_schema", "mysql", "performance_schema", "sys")
   protected val whitelist: java.util.List[String] = new java.util.LinkedList[String]()
   protected val blacklist: java.util.List[String] = new java.util.LinkedList[String]()
 
 
-  private var emitterLoader: Option[ActorRef] = None
-  private var formatterActor: Option[ActorRef] = None
-  private var columnInfoActor: Option[ActorRef] = None
-  private var transactionActor: Option[ActorRef] = None
+  protected lazy val emitterLoader: (ActorRefFactory => ActorRef) = (_ => system.actorOf(Props(new EmitterActor(clientProperties.getMysql,applicationContext)),"emitterLoader"+clientProperties.getMysql.getMyChannel))
 
-  /** Allows the configuration for the listener object to be set on startup.
-    * The listener will look for whitelist, blacklist, and emitter settings.
-    *
-    * @param config
-    */
-  def setConfig(config: DestinationProperty, encryptor: Encryptor) = {
-    whitelist.clear()
-    blacklist.clear()
-    if (StringUtils.isNotEmpty(config.getMysql.getWhitelist)) {
-      config.getMysql.getWhitelist.split(',').foreach(whitelist.add(_))
-      log.info(s"Using event whitelist: ${whitelist}")
-    }
-    else if (StringUtils.isNotEmpty(config.getMysql.getBlacklist)) {
-      config.getMysql.getBlacklist.split(',').foreach(blacklist.add(_))
-      log.info(s"Using event blacklist: ${blacklist}")
-    }
-    emitterLoader = Some(system.actorOf(Props(new EmitterActor(config.getMysql, applicationContext)), name = "emitterActor" + config.getMysql.getMyChannel))
-    formatterActor = Some(system.actorOf(Props(new JsonFormatterActor(_ => emitterLoader.get, config.getMysql, encryptor)), name = "formatterActor" + config.getMysql.getMyChannel))
-    columnInfoActor = Some(system.actorOf(Props(new ColumnInfoActor(_ => formatterActor.get, config.getMysql)), name = "columnInfoActor" + config.getMysql.getMyChannel))
-    transactionActor = Some(system.actorOf(Props(new TransactionActor(_ => columnInfoActor.get)), name = "transactionActor" + config.getMysql.getMyChannel))
-    log.info(s"init ${config.getMysql.getMyChannel} actor emitterLoader=${emitterLoader},formatterActor=${formatterActor},columnInfoActor = ${columnInfoActor},transactionActor = ${transactionActor}")
-    this
-  }
+  protected lazy val formatterActor = system.actorOf(Props(new JsonFormatterActor(emitterLoader,clientProperties.getMysql)),"formatterActor"+clientProperties.getMysql.getMyChannel)
+  protected lazy val columnInfoActor = system.actorOf(Props(new ColumnInfoActor(_ => formatterActor,clientProperties.getMysql)),"columnInfoActor"+clientProperties.getMysql.getMyChannel)
+  protected lazy val transactionActor = system.actorOf(Props(new TransactionActor(_ => columnInfoActor)),"transactionActor"+clientProperties.getMysql.getMyChannel)
+
+  protected lazy val clusterActor = system.actorOf(Props(new ClusterActor(_ => transactionActor,applicationContext)),"clusterActor"+clientProperties.getMysql.getMyChannel)
 
   /** Sends binlog events to the appropriate changestream actor.
     *
@@ -63,10 +42,10 @@ class ChangeStreamEventListener(system: ActorSystem, val applicationContext: App
     val changeEvent = getChangeEvent(binaryLogEvent)
 
     changeEvent match {
-      case Some(e: TransactionEvent) => transactionActor.get ! e
-      case Some(e: MutationEvent) => transactionActor.get ! MutationWithInfo(e)
-      case Some(e: AlterTableEvent) => columnInfoActor.get ! e
-      case Some(e: RotateEvent) => transactionActor.get ! e
+      case Some(e: TransactionEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,e)
+      case Some(e: MutationEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,MutationWithInfo(e))
+      case Some(e: AlterTableEvent) => columnInfoActor ! e
+      case Some(e: RotateEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,e)
       case None =>
         log.debug(s"Ignoring ${binaryLogEvent.getHeader[EventHeaderV4].getEventType} event.")
     }

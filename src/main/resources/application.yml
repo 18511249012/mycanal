@@ -1,30 +1,60 @@
+server:
+  port: ${port:8095}
 spring:
   data:
     elasticsearch:
-      clusterNodes: ${es.nodes:192.168.102.165:9300}
-      clusterName: hzcard
+      clusterNodes: ${es.nodes:172.16.112.160:9300}
+      clusterName: essdata.pre.beanz.cn
       repositories:
         enabled: true
   redis:
-    host: 192.168.102.206
+    host: 172.16.112.73
     port: 6379
     database: 6
 hzcard:
   syndata:
+    transCacheCount: 16
     encryptor:
       timeOut: 500
     destinations:
-      database1:
+      pre-m-1:
         mysql:
-          myChannel: m193
+          myChannel: pre-m-1
+          serverId: 191
+          keepalive: 5000
+          host: rds1.com.cn
+          port: 3306
+          user: hzcard
+          password: rds1
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+      pre-m-2:
+        mysql:
+          myChannel: pre-m-2
+          serverId: 192
+          keepalive: 5000
+          host: rds2.com.cn
+          port: 3306
+          user: hzcard
+          password: rds2
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+      pre-m-3:
+        mysql:
+          myChannel: pre-m-3
           serverId: 193
           keepalive: 5000
-          host: 192.168.102.193
+          host: rds3.com.cn
           port: 3306
-          user: mycanal
-          password: myCanalTest0503!
+          user: hzcard
+          password: rds3
           encryptor: false
-#          whitelist: reorder,points
           includeData: true
           preloadTimeOut: 30000
           timeout: 5000
@@ -41,38 +71,60 @@ hzcard:
                   resetEndPoint: reorderOperation
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: hzcard
+                  password: Hzcard1022
+                  url: jdbc:mysql://x.x.x.x:8066/reorder?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://targetDataSource.com.cn:3306/reorder?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
             points:
               includeSynTables: tp_partner_product,tp_point_details,tp_point_event_flow,tp_order_main,tp_order_product,tp_order_point,tp_operation_order_main,tp_operation_order_product,tp_operation_order_point,tp_order_offer_expr
+              tableRepository:
+                tp_operation_order_main:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderRepository
+                  resetEndPoint: operationOrderRepository
+                tp_operation_order_point:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderPointRepository
+                  resetEndPoint: operationOrderPoint
+                tp_operation_order_product:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderProductRepository
+                  resetEndPoint: operationOrderProduct
+                tp_order_offer_expr:
+                  repository: com.hzcard.syndata.points.repositories.OrderOfferExprRepository
+                  resetEndPoint: orderOfferExprRepository
+                tp_order_point:
+                  repository: com.hzcard.syndata.points.repositories.OrderPointRepository
+                  resetEndPoint: orderPointRepository
+                tp_order_product:
+                  repository: com.hzcard.syndata.points.repositories.OrderProductRepository
+                  resetEndPoint: orderProductRepository
+                tp_order_main:
+                  repository: com.hzcard.syndata.points.repositories.OrderRepository
+                  resetEndPoint: orderRepository
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
                   username: root
                   password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  url: jdbc:mysql://x.x.x.x:8066/points?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://target.com.cn:3306/points?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
             unionauth:
               includeSynTables: loginuser,userrole,roledef,roleresource,resoucechannel
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: hzcard
+                  password: Hzcard1022
+                  url: jdbc:mysql://x.x.x.x:8066/unionauth?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://target.com.cn:3306/unionauth?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
               tableRepository:
                 loginuser:
                   keyword: USERNAME
@@ -88,35 +140,39 @@ hzcard:
               includeSynTables: t_user,t_user_extend,t_user_address
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: hzcard
+                  password: Hzcard1022
+                  url: jdbc:mysql://x.x.x.x:8066/crm?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://target.com.cn:3306/crm?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
             partners:
               includeSynTables: pt_partner,pt_shop
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: hzcard
+                  password: Hzcard1022
+                  url: jdbc:mysql://x.x.x.x:8066/partners?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://target.com.cn:3306/partners?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
             exchange:
               includeSynTables: re_product
+              tableRepository:
+                re_product:
+                  repository: com.hzcard.syndata.exchange.repositories.ProductRepository
+                  resetEndPoint: productRepository
               sourceDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: hzcard
+                  password: Hzcard1022
+                  url: jdbc:mysql://x.x.x.x:8066/exchange?useUnicode=true&characterEncoding=utf8
               targetDataSource:
                   driverClassName: com.mysql.jdbc.Driver
-                  username: root
-                  password: root
-                  url: jdbc:mysql://192.168.102.206:3306/reorder?useUnicode=true&characterEncoding=utf8
+                  username: storm
+                  password: Storm2017.
+                  url: jdbc:mysql://target.com.cn:3306/exchange?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true

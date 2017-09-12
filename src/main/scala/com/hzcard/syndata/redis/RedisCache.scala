@@ -21,7 +21,7 @@ class RedisCache(@Autowired val redisTemplate: RedisTemplate[Object, Object]) {
   val mutexKey = "MYCHANNELRUNING-"
   val binLogPersisterKey = "BINLOG-"
 
-  def keepAlive(myChannel: String): Boolean = {
+  private def keepAlive(myChannel: String): Boolean = {
     val operation: ValueOperations[Object, Object] = redisTemplate.opsForValue()
     val key = mutexKey + myChannel
     val mutexValue = InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort
@@ -29,27 +29,24 @@ class RedisCache(@Autowired val redisTemplate: RedisTemplate[Object, Object]) {
       val value = operation.get(key).asInstanceOf[String]
       value == mutexValue
     }) {
-      redisTemplate.expire(key, 5, TimeUnit.MINUTES)
+      redisTemplate.expire(key, 30, TimeUnit.SECONDS)
       true
     } else
       false
 
   }
 
-  def regiestRunnerServer(myChannel: String) = {
+  def clusterIsAlive(myChannel: String): Boolean = {
     val operation: ValueOperations[Object, Object] = redisTemplate.opsForValue()
     var ifSent = false
-    while (!ifSent) { //循环监听
-      ifSent = operation.setIfAbsent(mutexKey + myChannel, InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort)
-      if (!ifSent) {
-        //看看是不是自己
-        if (keepAlive(myChannel))
-          ifSent = true
-        else
-          TimeUnit.MINUTES.sleep(1)
-      } else
-        redisTemplate.expire(mutexKey + myChannel, 5, TimeUnit.MINUTES)
-    }
+    ifSent = operation.setIfAbsent(mutexKey + myChannel, InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort)
+    if (!ifSent) {
+      //看看是不是自己
+      if (keepAlive(myChannel))
+        ifSent = true
+    } else
+      redisTemplate.expire(mutexKey + myChannel, 30, TimeUnit.SECONDS)
+    ifSent
   }
 
   def savePosition(positon: BinLogPosition): Unit = {
@@ -66,16 +63,5 @@ class RedisCache(@Autowired val redisTemplate: RedisTemplate[Object, Object]) {
       Some(BinLogPosition(myChannel, fp(0), java.lang.Long.parseLong(fp(1))))
     } else
       None
-  }
-
-  def unRegiestSelfRunnerServer(myChannel: String) = {
-    val mutexValue = InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort
-    val operation: ValueOperations[Object, Object] = redisTemplate.opsForValue()
-    val key = mutexKey + myChannel
-    if (redisTemplate.hasKey(key) && {
-      val value = operation.get(key).asInstanceOf[String]
-      value == mutexValue
-    }) //删除自身注册的存活
-      redisTemplate.delete(mutexKey + myChannel)
   }
 }

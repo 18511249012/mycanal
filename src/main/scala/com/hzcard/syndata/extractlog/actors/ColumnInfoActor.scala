@@ -1,7 +1,7 @@
 package com.hzcard.syndata.extractlog.actors
 
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
-import akka.actor.{Actor, ActorRef, ActorRefFactory, OneForOneStrategy}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, OneForOneStrategy}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import com.github.mauricio.async.db.mysql.exceptions.MySQLException
 import com.github.mauricio.async.db.mysql.pool.MySQLConnectionFactory
@@ -32,7 +32,7 @@ object ColumnInfoActor {
 class ColumnInfoActor(
                        getNextHop: ActorRefFactory => ActorRef,
                        config: MysqlClientProperties
-                     ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
+                     ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ActorLogging{
 
   import ColumnInfoActor._
   import context.dispatcher
@@ -43,7 +43,6 @@ class ColumnInfoActor(
       case _: Exception => Escalate
     }
 
-  protected val log = LoggerFactory.getLogger(getClass)
   protected val nextHop = getNextHop(context)
 
   protected val PRELOAD_TIMEOUT = config.getPreloadTimeOut.longValue()
@@ -85,14 +84,12 @@ class ColumnInfoActor(
 
   def receive = {
     case event: MutationWithInfo => try {
-      if (log.isInfoEnabled)
-        log.info(s"Received mutation event on table ${event.mutation.cacheKey},txId is ${event.transaction.get.gtid}")
+      if (log.isDebugEnabled)
+        log.debug(s"Received mutation event on table ${event.mutation.cacheKey},txId is ${event.transaction.get.gtid}，lastmu is ${event.transaction.get.lastMutationInTransaction}")
       columnsInfoCache.get(event.mutation.cacheKey) match {
         case info: Some[ColumnsInfo] =>
           nextHop ! event.copy(columns = info)
         case None =>
-          if (log.isInfoEnabled)
-            log.info(s"Couldn't find column info for event on table ${event.mutation.cacheKey} -- buffering mutation and kicking off a query")
           val pending = PendingMutation(getNextSchemaSequence, event)
           mutationBuffer(event.mutation.cacheKey) = mutationBuffer.get(event.mutation.cacheKey).fold(List(pending))(buffer =>
             buffer :+ pending
@@ -100,15 +97,12 @@ class ColumnInfoActor(
           requestColumnInfo(pending.schemaSequence, event.mutation.database, event.mutation.tableName)
       }
       mutationBuffer.remove(event.mutation.cacheKey).foreach({ bufferedMutations =>
-        val (ready, stillPending) = bufferedMutations.partition(mutation => columnsInfoCache.get(event.mutation.cacheKey).get.schemaSequence <= mutation.schemaSequence)
+        val (ready, stillPending) = bufferedMutations.partition(
+          mutation => columnsInfoCache.get(event.mutation.cacheKey).get.schemaSequence <= mutation.schemaSequence)
         mutationBuffer.put(columnsInfoCache.get(event.mutation.cacheKey).get.cacheKey, stillPending)
-        if (ready.size > 0) {
-          if (log.isInfoEnabled)
-            log.info(s"Adding column info and forwarding ${ready.size} mutations to the ${nextHop.path.name} actor")
+        if (ready.size > 0)
           ready.foreach(nextHop ! _.event.copy(columns = Some(columnsInfoCache.get(event.mutation.cacheKey).get)))
-        }
       })
-//      TimeUnit.MILLISECONDS.sleep(10L)
     } catch {
       case x: Throwable =>
         log.error("ColumnInfoActor exception " + x.getMessage, x)
@@ -128,11 +122,7 @@ class ColumnInfoActor(
 
   protected def requestColumnInfo(schemaSequence: Long, database: String, tableName: String) = {
     val future = getColumnsInfo(schemaSequence, database, tableName)
-    if (log.isDebugEnabled)
-      log.debug(s"wait future column inf return ${database},${tableName}")
     val columnInfo = Await.result(future, Duration.Inf).asInstanceOf[Option[ColumnsInfo]]
-    if (log.isDebugEnabled)
-      log.debug(s"wait future column return complete ${database},${tableName}")
     columnInfo match {
       case Some(result) => columnsInfoCache(result.cacheKey) = result
       case None => throw new RuntimeException(s"No column metadata found for table ${database}.${tableName}")
@@ -152,7 +142,7 @@ class ColumnInfoActor(
            |   case when pk.COLUMN_NAME is not null then true else false end as IS_PRIMARY
            | from INFORMATION_SCHEMA.COLUMNS col
            | left outer join INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
-           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA
+           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA and pk.CONSTRAINT_NAME='PRIMARY'
            |   and col.TABLE_NAME = pk.TABLE_NAME
            |   and col.COLUMN_NAME = pk.COLUMN_NAME
            | where col.TABLE_SCHEMA = '${escapedDatabase}'
@@ -202,10 +192,10 @@ class ColumnInfoActor(
            |   lower(col.TABLE_NAME)
            | from INFORMATION_SCHEMA.COLUMNS col
            | left outer join INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
-           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA
+           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA and pk.CONSTRAINT_NAME='PRIMARY'
            |   and col.TABLE_NAME = pk.TABLE_NAME
            |   and col.COLUMN_NAME = pk.COLUMN_NAME
-           | where col.TABLE_SCHEMA in ('${databases}') order by col.ORDINAL_POSITION
+           | where col.TABLE_SCHEMA in ('${databases}')   order by col.ORDINAL_POSITION
       """.stripMargin)
       .map(queryResult =>
         queryResult.rows.map(

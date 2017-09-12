@@ -1,45 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration>
     <Appenders>
-        <!--<SMTP name="Mail" subject="synData Error Log" to="xxduan@ronglian.com,jhzhang02@ronglian.com,zhangwei01@ronglian.com" from="reports@beanz.cn"-->
-        <!--smtpHost="smtp.partner.outlook.cn" smtpPort="587" bufferSize="512" smtpUsername="reports@beanz.cn" smtpPassword="asd@2017.">-->
-        <!--</SMTP>-->
+        <SMTP name="Mail" subject="mycanal Error Log" to="test@163.com" from="reports@163.com"
+              smtpHost="smtp.163.com "  bufferSize="50" smtpPassword="123456"
+              smtpUsername="reports@163.com" smtpDebug="true">
+        </SMTP>
         <RollingFile name="binlog" filePattern="/var/log/hzcard/binlog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/binlog.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
             </Policies>
         </RollingFile>
-
-        <RollingFile name="jsonDataLog" filePattern="/var/log/hzcard/jsonDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+        <RollingFile name="clusterLog"
+                     filePattern="/var/log/hzcard/clusterLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/clusterLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+        </RollingFile>
+        <RollingFile name="jsonDataLog"
+                     filePattern="/var/log/hzcard/jsonDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/jsonDataLog.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
             </Policies>
         </RollingFile>
-        <RollingFile name="emitterDataLog" filePattern="/var/log/hzcard/emitterDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+        <RollingFile name="emitterDataLog"
+                     filePattern="/var/log/hzcard/emitterDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/emitterDataLog.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
             </Policies>
         </RollingFile>
-
 
 
         <RollingFile name="transLog"
                      filePattern="/var/log/hzcard/transLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/transLog.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
@@ -50,15 +61,52 @@
                      filePattern="/var/log/hzcard/columnInfoLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/columnInfoLog.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
             </Policies>
         </RollingFile>
-        <RollingFile name="dealDataLog"
-                     filePattern="/var/log/hzcard/dealDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
-                     fileName="/var/log/hzcard/dealDataLog.log" append="true">
+        <RollingFile name="dbDealDataLog"
+                     filePattern="/var/log/hzcard/dbDealDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/dbDealDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+
+        </RollingFile>
+
+        <RollingFile name="esDealDataLog"
+                     filePattern="/var/log/hzcard/esDealDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/esDealDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+
+        </RollingFile>
+
+
+        <RollingFile name="hzcardDataLog"
+                     filePattern="/var/log/hzcard/hzcardDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/hzcardDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+
+        </RollingFile>
+
+        <RollingFile name="sendLog"
+                     filePattern="/var/log/hzcard/sendLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/sendLog.log" append="true">
             <PatternLayout
                     pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
             <Policies>
@@ -72,39 +120,56 @@
                      filePattern="/var/log/hzcard/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/reorderfileOut.log" append="true">
             <PatternLayout
-                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="250 MB"/>
             </Policies>
         </RollingFile>
+
         <Console name="STDOUT" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{DEFAULT} %-5p [%t] %C{2} (%F:%L) - %m%n"/>
         </Console>
     </Appenders>
     <Loggers>
-        <Root level="warn">
+        <Root level="error">
             <AppenderRef ref="STDOUT"/>
             <AppenderRef ref="filelog"/>
+            <AppenderRef ref="Mail"/>
         </Root>
-        <logger name="com.hzcard.syndata.datadeal.HzcardDataDealActor" level="info">
-            <AppenderRef ref="binlog"/>
-        </logger>
         <logger name="com.hzcard.syndata.extractlog.actors.TransactionActor" level="info">
             <AppenderRef ref="transLog"/>
         </logger>
         <logger name="com.hzcard.syndata.extractlog.actors.ColumnInfoActor" level="info">
             <AppenderRef ref="columnInfoLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.datadeal.MergeOperationArray" level="info">
-            <AppenderRef ref="dealDataLog"/>
+        <logger name="com.hzcard.syndata.datadeal.HzcardDataDealActor" level="info">
+            <AppenderRef ref="hzcardDataLog"/>
         </logger>
+
         <logger name="com.hzcard.syndata.extractlog.actors.JsonFormatterActor" level="info">
             <AppenderRef ref="jsonDataLog"/>
         </logger>
         <logger name="com.hzcard.syndata.extractlog.emitter.EmitterActor" level="info">
             <AppenderRef ref="emitterDataLog"/>
         </logger>
+        <logger name="com.hzcard.syndata.persist.PositionPersistActor" level="info">
+            <AppenderRef ref="binlog"/>
+        </logger>
+        <logger name="com.hzcard.syndata.send.MessagePool" level="info">
+            <AppenderRef ref="sendLog"/>
+        </logger>
+        <logger name="com.hzcard.syndata.datadeal.DbDealDataActor" level="info">
+            <AppenderRef ref="dbDealDataLog"/>
+        </logger>
+        <logger name="com.hzcard.syndata.datadeal.EsDealDataActor" level="info">
+            <AppenderRef ref="esDealDataLog"/>
+        </logger>
+
+        <logger name="com.hzcard.syndata.extractlog.actors.ClusterActor" level="info">
+            <AppenderRef ref="clusterLog"/>
+        </logger>
+
 
     </Loggers>
 </Configuration>

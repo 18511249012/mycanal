@@ -16,6 +16,8 @@ public class CanalClientProperties {
 
 	private Encryptor encryptor;
 
+	private Integer transCacheCount = 1024;
+
 
 	public String getZkServers() {
 		return zkServers;
@@ -50,5 +52,13 @@ public class CanalClientProperties {
 
 	public void setEncryptor(Encryptor encryptor) {
 		this.encryptor = encryptor;
+	}
+
+	public Integer getTransCacheCount() {
+		return transCacheCount;
+	}
+
+	public void setTransCacheCount(Integer transCacheCount) {
+		this.transCacheCount = transCacheCount;
 	}
 }

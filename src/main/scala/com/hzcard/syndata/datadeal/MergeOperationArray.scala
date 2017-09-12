@@ -9,8 +9,6 @@ import scala.collection.mutable.ArrayBuffer
   */
 trait MergeOperationArray {
 
-  val logger = LoggerFactory.getLogger(classOf[MergeOperationArray])
-
   def merger(esChangeArray: Array[SchemaTableMapData]) = {
     val newArray = new ArrayBuffer[Option[SchemaTableMapBatchData]]
     for (i <- 0 until esChangeArray.length) {
@@ -50,7 +48,6 @@ trait MergeOperationArray {
                     notInsert = true
                 } catch {
                   case e: Throwable =>
-                    logger.error("merger exception : {} ; tempNewEventType is {},nextEventType is {}", e.getMessage, tempNewEventType, nextEventType, e)
                     throw e
                 }
               } else {
@@ -68,7 +65,6 @@ trait MergeOperationArray {
                     }
                   } catch {
                     case e: Throwable =>
-                      logger.error("merger exception : {} ; lastEventType is {},nextEventType is {}", e.getMessage, lastEventType, nextEventType, e)
                       throw e
                   }
                 }

@@ -1,68 +1,28 @@
 package com.hzcard.syndata.extractlog.emitter
 
-import java.util.concurrent.{ArrayBlockingQueue, ConcurrentHashMap, TimeUnit}
-
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorLogging}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
-import akka.pattern.ask
-import akka.util.Timeout
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.hzcard.syndata.config.autoconfig.MysqlClientProperties
+import com.hzcard.syndata.datadeal.MergeOperationArray
 import com.hzcard.syndata.extractlog.events.MutationWithInfo
-import org.slf4j.LoggerFactory
+import com.hzcard.syndata.send.MessagePool
 import org.springframework.context.ApplicationContext
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 /**
   * Created by zhangwei on 2017/5/10.
   */
-class EmitterActor(config: MysqlClientProperties, applicationContext: ApplicationContext) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
-  implicit val timeout = Timeout(60 minutes)
-  val log = LoggerFactory.getLogger(getClass)
+class EmitterActor(config: MysqlClientProperties, applicationContext: ApplicationContext) extends Actor with MergeOperationArray with RequiresMessageQueue[BoundedMessageQueueSemantics] with ActorLogging{
+
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
-  val cacheMTId = new ArrayBlockingQueue[String](32) //最多缓存32条事务
-  val cacheMessage = new ConcurrentHashMap[String, SourceDataSourceChangeEvent]
-  var isSend = true
-  val hzcardDataDealActor = applicationContext.getBean("hzcardDataDealActorRef").asInstanceOf[ActorRef]
-
-  val sendMessage = new Thread("emitter-send-thread" + config.getMyChannel) {
-    override def run(): Unit = {
-      while (isSend) {
-        val toSendMessages = new ArrayBuffer[SourceDataSourceChangeEvent](0)
-        val txId = cacheMTId.take()
-        val singleTrans = cacheMessage.get(txId)
-        if (singleTrans != null) {
-          toSendMessages += singleTrans
-          cacheMessage.remove(txId)
-        }
-
-        while (toSendMessages.length > 0 && isSend) {
-          val future = hzcardDataDealActor ? (toSendMessages.toArray)
-          try {
-            val isDeal = Await.result(future, timeout.duration).asInstanceOf[Boolean]
-            if (isDeal) {
-              toSendMessages.clear()
-            }
-          } catch {
-            case x: Throwable =>
-              log.info(s"fail data send array size is ${toSendMessages.length}")
-              log.error("处理数据失败！，重新发送", x)
-          }
-        }
-      }
-    }
-  }
-
-  sendMessage.start()
+  val messagePool = applicationContext.getBean("messagePool").asInstanceOf[MessagePool]
 
   override def receive: Receive = {
     case MutationWithInfo(mutation, t, _, mutationData, Some(message: String)) =>
-      val adderSupplier = new java.util.function.BiFunction[String, SourceDataSourceChangeEvent, SourceDataSourceChangeEvent]() {
+      val adderSupplier = new java.util.function.BiFunction[String, SourceDataSourceChangeEvent, SourceDataSourceChangeEvent]() {  //同transaction的数据合并为一个transaction对象
         override def apply(k: String, u: SourceDataSourceChangeEvent): SourceDataSourceChangeEvent = {
           if (u == null) {
             if (t.get.lastMutationInTransaction)
@@ -78,31 +38,21 @@ class EmitterActor(config: MysqlClientProperties, applicationContext: Applicatio
           }
         }
       }
-      cacheMessage.compute(mutationData.transaction.id, adderSupplier)
-      log.info(s"Received transaction is :${
-        mutationData.transaction.id
-      },transaction lastMutationInTransaction is ${
-        t.get.gtid
-      }:${
-        t.get.lastMutationInTransaction
-      }")
+      messagePool.compute(mutationData.transaction.id, adderSupplier)
       if (t.get.lastMutationInTransaction) {
         //事务结束，放入transactionId
-        cacheMTId.put(mutationData.transaction.id)
-        log.info(s"Received transaction cacheMTId put  :${
-          mutationData.transaction.id
-        }")
+        if(mutationData.transaction.last_mutation) {     //最后一行数据，表示放置transaction完毕
+          messagePool.putTx(mutationData.transaction.id)
+          log.info(s"Received transaction cacheMTId put  :${
+            mutationData.transaction.id
+          }")
+        }
       }
-    //      TimeUnit.MILLISECONDS.sleep(10L)
+
     case _ =>
-      log.error(s"Received invalid message.")
-      sender() ! akka.actor.Status.Failure(new Exception("Received invalid message"))
+      throw new RuntimeException("message not match")
   }
 
-  override def postStop(): Unit = {
-    isSend = false
-    TimeUnit.SECONDS.sleep(5L)
-  }
 }
 
 case class MutationData(mutation: String, sequence: Long, database: String, table: String, query: QueryInfo, primary_key: collection.mutable.LinkedHashMap[String, java.io.Serializable], transaction: Transaction, row_data: collection.mutable.LinkedHashMap[String, java.io.Serializable], old_row_data: collection.mutable.LinkedHashMap[String, java.io.Serializable])
