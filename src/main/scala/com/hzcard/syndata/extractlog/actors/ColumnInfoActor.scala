@@ -1,228 +1,173 @@
 package com.hzcard.syndata.extractlog.actors
 
-import akka.actor.SupervisorStrategy.{Escalate, Restart}
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, OneForOneStrategy}
+import java.sql.ResultSet
+
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, ActorSystem, OneForOneStrategy}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
-import com.github.mauricio.async.db.mysql.exceptions.MySQLException
-import com.github.mauricio.async.db.mysql.pool.MySQLConnectionFactory
-import com.github.mauricio.async.db.pool.{ConnectionPool, PoolConfiguration}
-import com.github.mauricio.async.db.util.ExecutorServiceUtils
-import com.github.mauricio.async.db.{Configuration, RowData}
-import com.hzcard.syndata.config.autoconfig.MysqlClientProperties
+import com.hzcard.syndata.SpringExtentionImpl
+import com.hzcard.syndata.datadeal.DealDataRequestModel
 import com.hzcard.syndata.extractlog.events._
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.{Autowired, Qualifier}
+import org.springframework.beans.factory.config.ConfigurableBeanFactory
+import org.springframework.context.ApplicationContext
+import org.springframework.context.annotation.Scope
+import org.springframework.jdbc.datasource.lookup.MapDataSourceLookup
+import org.springframework.stereotype.Component
 
 import scala.collection.mutable
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.collection.mutable.ArrayBuffer
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
 
-object ColumnInfoActor {
-  val COLUMN_NAME = 0
-  val DATA_TYPE = 1
-  val IS_PRIMARY = 2
-  val DATABASE_NAME = 3
-  val TABLE_NAME = 4
-  val PRELOAD_POSITION = 0
 
-  case class PendingMutation(schemaSequence: Long, event: MutationWithInfo)
+case class PendingMutation(schemaSequence: Long, event: MutationWithInfo)
 
-}
+@Component("columnInfoActor")
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 class ColumnInfoActor(
-                       getNextHop: ActorRefFactory => ActorRef,
-                       config: MysqlClientProperties
-                     ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] with ActorLogging{
+                       @Autowired dataSourceLookup: MapDataSourceLookup, @Autowired @Qualifier("jsonFormatterActorRef") nextHop: ActorRef
+                     ) extends Actor with RequiresMessageQueue[BoundedMessageQueueSemantics] {
 
-  import ColumnInfoActor._
-  import context.dispatcher
+  val log = LoggerFactory.getLogger(getClass)
 
-  override val supervisorStrategy =
-    OneForOneStrategy(loggingEnabled = true) {
-      case _: MySQLException => Restart
-      case _: Exception => Escalate
-    }
+  val COLUMN_NAME = 1
+  val DATA_TYPE = 2
+  val IS_PRIMARY = 3
+  val DATABASE_NAME = 4
+  val TABLE_NAME = 5
 
-  protected val nextHop = getNextHop(context)
-
-  protected val PRELOAD_TIMEOUT = config.getPreloadTimeOut.longValue()
-  protected val preloadDatabases = config.getPreloadDatabases
-
-  protected val TIMEOUT = config.getTimeout.longValue()
-  protected val mysqlConfig = new Configuration(
-    config.getUser,
-    config.getHost,
-    config.getPort,
-    Some(config.getPassword)
-  )
-  private val pool = new ConnectionPool(new MySQLConnectionFactory(mysqlConfig), PoolConfiguration.Default, ExecutionContext.fromExecutor(ExecutorServiceUtils.newFixedPool(10, "db-async-default")))
-  protected var _schemaSequence = -1
-  protected def getNextSchemaSequence: Long = {
-    _schemaSequence += 1
-    _schemaSequence
-  }
-  protected val columnsInfoCache = mutable.HashMap.empty[(String, String), ColumnsInfo]
-  protected val mutationBuffer = mutable.HashMap.empty[(String, String), List[PendingMutation]]
-
-  override def preStart() = {
-    val connectRequest = pool.connect
-
-    connectRequest onComplete {
-      case Success(result) =>
-        log.info("Connected to MySQL server for Metadata!!")
-      case Failure(exception) =>
-        log.error("Could not connect to MySQL server for Metadata", exception)
-        throw exception
-    }
-    Await.result(connectRequest, TIMEOUT milliseconds)
-    preLoadColumnData
+  override def supervisorStrategy = OneForOneStrategy() {
+    case _: ActorInitializationException => Stop
+    case _: ActorKilledException => Stop
+    case _: Throwable => Restart
   }
 
-  override def postStop() = {
-    Await.result(pool.disconnect, TIMEOUT milliseconds)
+  protected val _schemaSequence = mutable.HashMap.empty[String, Long]
+
+  protected def getNextSchemaSequence(myChannel: String): Long = {
+    if (_schemaSequence.get(myChannel).isEmpty)
+      _schemaSequence.put(myChannel, -1L)
+
+    _schemaSequence.put(myChannel, _schemaSequence.get(myChannel).get + 1)
+    _schemaSequence.get(myChannel).get
+  }
+
+  protected val columnsInfoCache = mutable.HashMap.empty[String, mutable.HashMap[(String, String), ColumnsInfo]]
+//  protected val mutationBuffer = mutable.HashMap.empty[String, mutable.HashMap[(String, String), List[PendingMutation]]]
+
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    super.preRestart(reason, message)
+    reason match {
+      case ColumInfoNotMatchException(message:String) =>
+      case oth if(!message.isEmpty) => {
+        log.warn(s"retrying send message ${oth}")
+        self ! oth
+      }
+    }
   }
 
   def receive = {
     case event: MutationWithInfo => try {
       if (log.isDebugEnabled)
         log.debug(s"Received mutation event on table ${event.mutation.cacheKey},txId is ${event.transaction.get.gtid}，lastmu is ${event.transaction.get.lastMutationInTransaction}")
-      columnsInfoCache.get(event.mutation.cacheKey) match {
+      if (columnsInfoCache.get(event.myChannel.get).isEmpty) {
+        columnsInfoCache.put(event.myChannel.get, mutable.HashMap.empty[(String, String), ColumnsInfo])
+      }
+
+      columnsInfoCache.get(event.myChannel.get).get.get(event.mutation.cacheKey) match {
         case info: Some[ColumnsInfo] =>
           nextHop ! event.copy(columns = info)
         case None =>
-          val pending = PendingMutation(getNextSchemaSequence, event)
-          mutationBuffer(event.mutation.cacheKey) = mutationBuffer.get(event.mutation.cacheKey).fold(List(pending))(buffer =>
-            buffer :+ pending
-          )
-          requestColumnInfo(pending.schemaSequence, event.mutation.database, event.mutation.tableName)
+          val pending = PendingMutation(getNextSchemaSequence(event.myChannel.get), event)
+          requestColumnInfo(event.myChannel.get, pending.schemaSequence, event.mutation.database, event.mutation.tableName)
+          nextHop ! event.copy(columns = Some(columnsInfoCache.get(event.myChannel.get).get(event.mutation.cacheKey)))
       }
-      mutationBuffer.remove(event.mutation.cacheKey).foreach({ bufferedMutations =>
-        val (ready, stillPending) = bufferedMutations.partition(
-          mutation => columnsInfoCache.get(event.mutation.cacheKey).get.schemaSequence <= mutation.schemaSequence)
-        mutationBuffer.put(columnsInfoCache.get(event.mutation.cacheKey).get.cacheKey, stillPending)
-        if (ready.size > 0)
-          ready.foreach(nextHop ! _.event.copy(columns = Some(columnsInfoCache.get(event.mutation.cacheKey).get)))
-      })
     } catch {
       case x: Throwable =>
         log.error("ColumnInfoActor exception " + x.getMessage, x)
-        sender() ! akka.actor.Status.Failure(x)
+        throw x
+      //        sender() ! akka.actor.Status.Failure(x)
     }
 
     case alter: AlterTableEvent =>
       if (log.isDebugEnabled)
         log.debug(s"Refreshing the cache due to alter table (${alter.cacheKey}): ${alter.sql}")
-      columnsInfoCache.remove(alter.cacheKey)
-      requestColumnInfo(getNextSchemaSequence, alter.database, alter.tableName)
+      if (!columnsInfoCache.get(alter.myChannel).isEmpty)
+        columnsInfoCache.get(alter.myChannel).get.remove(alter.cacheKey)
+      requestColumnInfo(alter.myChannel, getNextSchemaSequence(alter.myChannel), alter.database, alter.tableName)
 
-    case _ =>
-      log.error("Invalid message received by ColumnInfoActor")
-      throw new Exception("Invalid message received by ColumnInfoActor")
+    case othe =>
+      log.error("Invalid message received by ColumnInfoActor,message is ${othe}")
+      throw new ColumInfoNotMatchException(s"Invalid message received by ColumnInfoActor,message is ${othe}")
   }
 
-  protected def requestColumnInfo(schemaSequence: Long, database: String, tableName: String) = {
-    val future = getColumnsInfo(schemaSequence, database, tableName)
-    val columnInfo = Await.result(future, Duration.Inf).asInstanceOf[Option[ColumnsInfo]]
+  protected def requestColumnInfo(myChannel: String, schemaSequence: Long, database: String, tableName: String) = {
+    val columnInfo = getColumnsInfo(myChannel, schemaSequence, database, tableName)
     columnInfo match {
-      case Some(result) => columnsInfoCache(result.cacheKey) = result
+      case Some(result) => {
+        if (columnsInfoCache.get(myChannel).isEmpty)
+          columnsInfoCache.put(myChannel, mutable.HashMap.empty[(String, String), ColumnsInfo])
+        columnsInfoCache.get(myChannel).get.put(result.cacheKey, result)
+      }
       case None => throw new RuntimeException(s"No column metadata found for table ${database}.${tableName}")
     }
   }
 
-  protected def getColumnsInfo(schemaSequence: Long, database: String, tableName: String): Future[Option[ColumnsInfo]] = {
+  protected def getColumnsInfo(myChannel: String, schemaSequence: Long, database: String, tableName: String): Option[ColumnsInfo] = {
 
     val escapedDatabase = database.replace("'", "\\'")
     val escapedTableName = tableName.replace("'", "\\'")
-    pool
-      .sendQuery(
-        s"""
-           | select
-           |   col.COLUMN_NAME,
-           |   col.DATA_TYPE,
-           |   case when pk.COLUMN_NAME is not null then true else false end as IS_PRIMARY
-           | from INFORMATION_SCHEMA.COLUMNS col
-           | left outer join INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
-           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA and pk.CONSTRAINT_NAME='PRIMARY'
-           |   and col.TABLE_NAME = pk.TABLE_NAME
-           |   and col.COLUMN_NAME = pk.COLUMN_NAME
-           | where col.TABLE_SCHEMA = '${escapedDatabase}'
-           |   and col.TABLE_NAME = '${escapedTableName}' order by col.ORDINAL_POSITION
-      """.stripMargin)
-      .map(_.rows.map(_.map(getColumnForRow)) match {
-        case Some(list) if !list.isEmpty =>
-          Some(ColumnsInfo(
-            schemaSequence,
-            database,
-            tableName,
-            list
-          ))
-        case _ =>
-          None
-      })
-  }
-
-  protected def preLoadColumnData = {
-    if (!preloadDatabases.isEmpty) {
-      val request = for {
-        columnsInfo <- getAllColumnsInfo recover {
-          case exception =>
-            log.error(s"Couldn't fetch metadata for databases: ${preloadDatabases}", exception)
-            throw exception
-        }
-      } yield columnsInfo.foreach {
-        case table: ColumnsInfo =>
-          columnsInfoCache(table.cacheKey) = table
+    val dataSouce = dataSourceLookup.getDataSource("channel" + myChannel)
+    val conn = dataSouce.getConnection
+    try {
+      val sql = "select col.COLUMN_NAME," +
+        "col.DATA_TYPE,case when pk.COLUMN_NAME is not null then true  else false end as IS_PRIMARY " +
+        "from INFORMATION_SCHEMA.COLUMNS col " +
+        "left outer join INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk on col.TABLE_SCHEMA = pk.TABLE_SCHEMA and pk.CONSTRAINT_NAME = 'PRIMARY' " +
+        "and col.TABLE_NAME = pk.TABLE_NAME and col.COLUMN_NAME = pk.COLUMN_NAME " +
+        "where col.TABLE_SCHEMA = ? and col.TABLE_NAME = ? order by col.ORDINAL_POSITION"
+      val preparedStatement = conn.prepareStatement(sql)
+      preparedStatement.setString(1, escapedDatabase)
+      preparedStatement.setString(2, escapedTableName)
+      val result = preparedStatement.executeQuery()
+      val rowData = new ArrayBuffer[Column]
+      while (result.next()) {
+        rowData += getColumnForRow(result)
       }
+      result.close()
+      preparedStatement.close()
+      conn.close()
+      if(rowData.size==0)
+        throw new RuntimeException("columinfo not get")
+      Some(ColumnsInfo(
+        schemaSequence,
+        database,
+        tableName,
+        rowData
+      ))
 
-      Await.result(request, PRELOAD_TIMEOUT milliseconds)
-    }
+    } catch {
+      case x: Throwable =>
+        log.error(s"query mysql matainfo exception myChannel is ${myChannel} , database is ${database} , tableName is ${tableName}", x)
+        throw x
+    } finally
+      if (!conn.isClosed)
+        conn.close()
+
   }
 
-  protected def getAllColumnsInfo: Future[Iterable[ColumnsInfo]] = {
-    val databases = preloadDatabases.replace("'", "\'").split(",").mkString("','")
 
-    pool
-      .sendQuery(
-        s"""
-           | select
-           |   lower(col.COLUMN_NAME),
-           |   lower(col.DATA_TYPE),
-           |   case when pk.COLUMN_NAME is not null then true else false end as IS_PRIMARY,
-           |   lower(col.TABLE_SCHEMA) as DATABASE_NAME,
-           |   lower(col.TABLE_NAME)
-           | from INFORMATION_SCHEMA.COLUMNS col
-           | left outer join INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk
-           |   on col.TABLE_SCHEMA = pk.TABLE_SCHEMA and pk.CONSTRAINT_NAME='PRIMARY'
-           |   and col.TABLE_NAME = pk.TABLE_NAME
-           |   and col.COLUMN_NAME = pk.COLUMN_NAME
-           | where col.TABLE_SCHEMA in ('${databases}')   order by col.ORDINAL_POSITION
-      """.stripMargin)
-      .map(queryResult =>
-        queryResult.rows.map(
-          _.groupBy(row =>
-            (
-              row(DATABASE_NAME).asInstanceOf[String],
-              row(TABLE_NAME).asInstanceOf[String]
-            )) collect {
-            case ((database, table), rows) =>
-              ColumnsInfo(
-                getNextSchemaSequence,
-                database,
-                table,
-                rows.map(getColumnForRow)
-              )
-          }
-        ).getOrElse(Iterable.empty))
-  }
-
-  protected def getColumnForRow(row: RowData): Column = {
+  protected def getColumnForRow(row: ResultSet): Column = {
     Column(
-      name = row(COLUMN_NAME).asInstanceOf[String],
-      dataType = row(DATA_TYPE).asInstanceOf[String],
-      isPrimary = row(IS_PRIMARY) match {
-        case 0 => false
-        case 1 => true
-      }
+      name = row.getString(COLUMN_NAME),
+      dataType = row.getString(DATA_TYPE),
+      isPrimary = row.getBoolean(IS_PRIMARY)
     )
   }
+
+
 }
+
+case class  ColumInfoNotMatchException(message:String) extends Throwable(message)

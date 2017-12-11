@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration>
     <Appenders>
-        <SMTP name="Mail" subject="mycanal Error Log" to="test@163.com" from="reports@163.com"
-              smtpHost="smtp.163.com "  bufferSize="50" smtpPassword="123456"
-              smtpUsername="reports@163.com" smtpDebug="true">
+        <SMTP name="Mail" subject="mycanal Error Log" to="xx_duan@test.cn" from="reports@test.cn"
+              smtpHost="smtp.partner.outlook.cn" smtpPort="587" bufferSize="50" smtpPassword="123456"
+              smtpUsername="reports@test.cn" smtpDebug="false">
         </SMTP>
         <RollingFile name="binlog" filePattern="/var/log/hzcard/binlog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/binlog.log" append="true">
@@ -31,8 +31,9 @@
                     pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-                <SizeBasedTriggeringPolicy size="250 MB"/>
+                <SizeBasedTriggeringPolicy size="1024 MB"/>
             </Policies>
+            <DefaultRolloverStrategy max="20"/>
         </RollingFile>
         <RollingFile name="emitterDataLog"
                      filePattern="/var/log/hzcard/emitterDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
@@ -79,9 +80,24 @@
 
         </RollingFile>
 
+
+
+
         <RollingFile name="esDealDataLog"
                      filePattern="/var/log/hzcard/esDealDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/esDealDataLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+
+        </RollingFile>
+
+        <RollingFile name="lostDataLog"
+                     filePattern="/var/log/hzcard/lostDataLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/lostData.log" append="true">
             <PatternLayout
                     pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
             <Policies>
@@ -116,6 +132,20 @@
 
         </RollingFile>
 
+
+
+        <RollingFile name="slaverLog"
+                     filePattern="/var/log/hzcard/slaverLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/slaverLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %C{2} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+
+        </RollingFile>
+
         <RollingFile name="filelog"
                      filePattern="/var/log/hzcard/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
                      fileName="/var/log/hzcard/reorderfileOut.log" append="true">
@@ -127,6 +157,18 @@
             </Policies>
         </RollingFile>
 
+        <RollingFile name="dbOperationLog"
+                     filePattern="/var/log/hzcard/dbOperationLog/$${date:yyyy-MM}/app-%d{MM-dd-yyyy}-%i.log.gz"
+                     fileName="/var/log/hzcard/dbOperationLog.log" append="true">
+            <PatternLayout
+                    pattern="%d{DEFAULT} %-5level [%t] %X{akkaSource} %L %M - %msg%xEx%n"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="250 MB"/>
+            </Policies>
+        </RollingFile>
+
+
         <Console name="STDOUT" target="SYSTEM_OUT">
             <PatternLayout pattern="%d{DEFAULT} %-5p [%t] %C{2} (%F:%L) - %m%n"/>
         </Console>
@@ -137,37 +179,53 @@
             <AppenderRef ref="filelog"/>
             <AppenderRef ref="Mail"/>
         </Root>
-        <logger name="com.hzcard.syndata.extractlog.actors.TransactionActor" level="info">
+
+
+        <logger name="com.hzcard.syndata.extractlog.actors.TransactionActor" level="info" additivity="false">
             <AppenderRef ref="transLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.extractlog.actors.ColumnInfoActor" level="info">
+        <logger name="com.hzcard.syndata.extractlog.actors.ColumnInfoActor" level="info" additivity="false">
             <AppenderRef ref="columnInfoLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.datadeal.HzcardDataDealActor" level="info">
+        <logger name="com.hzcard.syndata.datadeal.HzcardDataDealActor" level="info" additivity="false">
             <AppenderRef ref="hzcardDataLog"/>
         </logger>
 
-        <logger name="com.hzcard.syndata.extractlog.actors.JsonFormatterActor" level="info">
+        <logger name="com.hzcard.syndata.extractlog.actors.JsonFormatterActor" level="info" additivity="false">
             <AppenderRef ref="jsonDataLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.extractlog.emitter.EmitterActor" level="info">
+        <logger name="com.hzcard.syndata.extractlog.emitter.EmitterActor" level="info" additivity="false">
             <AppenderRef ref="emitterDataLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.persist.PositionPersistActor" level="info">
+        <logger name="com.hzcard.syndata.persist.PositionPersistActor" level="info" additivity="false">
             <AppenderRef ref="binlog"/>
         </logger>
         <logger name="com.hzcard.syndata.send.MessagePool" level="info">
             <AppenderRef ref="sendLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.datadeal.DbDealDataActor" level="info">
+        <logger name="com.hzcard.syndata.datadeal.DbDealDataActor" level="info" additivity="false">
             <AppenderRef ref="dbDealDataLog"/>
         </logger>
-        <logger name="com.hzcard.syndata.datadeal.EsDealDataActor" level="info">
+        <logger name="com.hzcard.syndata.datadeal.EsDealDataActor" level="info" additivity="false">
             <AppenderRef ref="esDealDataLog"/>
+            <!--<AppenderRef ref="STDOUT"/>-->
         </logger>
 
-        <logger name="com.hzcard.syndata.extractlog.actors.ClusterActor" level="info">
+        <logger name="com.hzcard.syndata.extractlog.actors.ClusterActor" level="info" additivity="false">
             <AppenderRef ref="clusterLog"/>
+        </logger>
+
+        <logger name="com.hzcard.syndata.lister.DeadLettersActor" level="warn" additivity="false">
+            <AppenderRef ref ="lostDataLog"/>
+        </logger>
+        <logger name="com.hzcard.syndata.datadeal.DBOperationScala" level="info" additivity="false">
+            <AppenderRef ref="dbOperationLog"/>
+
+        </logger>
+
+        <logger name="com.hzcard.syndata.extractlog.Slaver" level="info" additivity="false">
+            <AppenderRef ref="slaverLog"/>
+
         </logger>
 
 

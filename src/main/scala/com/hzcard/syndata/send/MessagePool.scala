@@ -21,46 +21,42 @@ import org.springframework.stereotype.Component
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-@Component
-@Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-class MessagePool(@Autowired system: ActorSystem, @Autowired applicationContext: ApplicationContext) {
+//@Component
+//@Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
+class MessagePool() {
 
   implicit val timeout = Timeout(60 seconds)
   val log = LoggerFactory.getLogger(getClass)
 
-  val cacheMTId = new ArrayBlockingQueue[String](500) //最多缓存
-  val cacheMessage = new ConcurrentHashMap[String, SourceDataSourceChangeEvent]
+  val cacheMTId = new ArrayBlockingQueue[String](5000) //最多缓存
+
   var isSend = true
 
-  protected lazy val persistorLoader: (ActorRefFactory => ActorRef) = (_ => system.actorOf(Props(new PositionPersistActor(applicationContext)), "persistorLoader"))
+  /*protected lazy val persistorLoader: (ActorRefFactory => ActorRef) = (_ => system.actorOf(Props(new PositionPersistActor(applicationContext)), "persistorLoader"))
 
   protected lazy val esDealDataActor = system.actorOf(Props(new EsDealDataActor(persistorLoader, applicationContext)), "esDealDataActor")
   protected lazy val dbDealDataActor = system.actorOf(Props(new DbDealDataActor(_ => esDealDataActor, applicationContext)), "dbDealDataActor")
-  protected lazy val hzcardDataDealActor = system.actorOf(Props(new HzcardDataDealActor(_ => dbDealDataActor)), "hzcardDataDealActor")
+  protected val hzcardDataDealActor = system.actorOf(Props(new HzcardDataDealActor(_ => dbDealDataActor)), "hzcardDataDealActor")*/
 
+//
+//  val sendMessage = new Thread("emitter-send-thread") {
+//    override def run(): Unit = {
+//      while (isSend) {
+//        val txId = cacheMTId.take()
+//        val singleTrans = cacheMessage.get(txId)
+//        if (singleTrans != null) {
+//          hzcardDataDealActor ! singleTrans
+//          cacheMessage.remove(txId)
+//        }
+//      }
+//    }
+//  }
+//  sendMessage.setPriority(10)
+//  sendMessage.start()
+//
+//  def compute(id: String, adderSupplier: BiFunction[String, SourceDataSourceChangeEvent, SourceDataSourceChangeEvent]) = cacheMessage.compute(id, adderSupplier)
+//
+//  def putTx(id: String) = this.cacheMTId.put(id)
 
-  val sendMessage = new Thread("emitter-send-thread") {
-    override def run(): Unit = {
-      while (isSend) {
-        val txId = cacheMTId.take()
-        val singleTrans = cacheMessage.get(txId)
-        if (singleTrans != null) {
-          hzcardDataDealActor ! singleTrans
-          cacheMessage.remove(txId)
-        }
-      }
-    }
-  }
-  sendMessage.start()
-
-  def compute(id: String, adderSupplier: BiFunction[String, SourceDataSourceChangeEvent, SourceDataSourceChangeEvent]) = cacheMessage.compute(id, adderSupplier)
-
-  def putTx(id: String) = this.cacheMTId.put(id)
-
-  @PreDestroy
-  def destory(): Unit = {
-    isSend = false
-    TimeUnit.SECONDS.sleep(5L)
-  }
 
 }

@@ -5,32 +5,27 @@ import com.github.shyiko.mysql.binlog.BinaryLogClient.EventListener
 import com.github.shyiko.mysql.binlog.event.EventType._
 import com.github.shyiko.mysql.binlog.event._
 import com.hzcard.syndata.config.autoconfig.{DestinationProperty, Encryptor}
+import com.hzcard.syndata.datadeal.{DbDealDataActor, EsDealDataActor, HzcardDataDealActor}
 import com.hzcard.syndata.extractlog.actors._
 import com.hzcard.syndata.extractlog.emitter.EmitterActor
 import com.hzcard.syndata.extractlog.events._
+import com.hzcard.syndata.persist.PositionPersistActor
 import org.apache.commons.lang.StringUtils
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationContext
 
 
 object ChangeStreamEventListener {
-  def apply(system: ActorSystem, applicationContext: ApplicationContext,clientProperties: DestinationProperty): ChangeStreamEventListener = new ChangeStreamEventListener(system, applicationContext,clientProperties)
+  def apply(system: ActorSystem, applicationContext: ApplicationContext, clientProperties: DestinationProperty): ChangeStreamEventListener = new ChangeStreamEventListener(system, applicationContext, clientProperties)
 }
 
-class ChangeStreamEventListener(system: ActorSystem, val applicationContext: ApplicationContext,clientProperties: DestinationProperty) extends EventListener {
+class ChangeStreamEventListener(system: ActorSystem, val applicationContext: ApplicationContext, clientProperties: DestinationProperty) extends EventListener {
   protected val log = LoggerFactory.getLogger(getClass)
   protected val systemDatabases = Seq("information_schema", "mysql", "performance_schema", "sys")
   protected val whitelist: java.util.List[String] = new java.util.LinkedList[String]()
   protected val blacklist: java.util.List[String] = new java.util.LinkedList[String]()
 
-
-  protected lazy val emitterLoader: (ActorRefFactory => ActorRef) = (_ => system.actorOf(Props(new EmitterActor(clientProperties.getMysql,applicationContext)),"emitterLoader"+clientProperties.getMysql.getMyChannel))
-
-  protected lazy val formatterActor = system.actorOf(Props(new JsonFormatterActor(emitterLoader,clientProperties.getMysql)),"formatterActor"+clientProperties.getMysql.getMyChannel)
-  protected lazy val columnInfoActor = system.actorOf(Props(new ColumnInfoActor(_ => formatterActor,clientProperties.getMysql)),"columnInfoActor"+clientProperties.getMysql.getMyChannel)
-  protected lazy val transactionActor = system.actorOf(Props(new TransactionActor(_ => columnInfoActor)),"transactionActor"+clientProperties.getMysql.getMyChannel)
-
-  protected lazy val clusterActor = system.actorOf(Props(new ClusterActor(_ => transactionActor,applicationContext)),"clusterActor"+clientProperties.getMysql.getMyChannel)
+  private val clusterActor = applicationContext.getBean("clusterActorRef").asInstanceOf[ActorRef]
 
   /** Sends binlog events to the appropriate changestream actor.
     *
@@ -42,10 +37,15 @@ class ChangeStreamEventListener(system: ActorSystem, val applicationContext: App
     val changeEvent = getChangeEvent(binaryLogEvent)
 
     changeEvent match {
-      case Some(e: TransactionEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,e)
-      case Some(e: MutationEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,MutationWithInfo(e))
-      case Some(e: AlterTableEvent) => columnInfoActor ! e
-      case Some(e: RotateEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel,e)
+      case Some(e: TransactionEvent) => {
+        if (log.isDebugEnabled)
+          log.debug(s"send ${e} to clusterActor ${clusterActor}")
+        clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel, e)
+      }
+      case Some(e: MutationEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel, MutationWithInfo(e))
+      case Some(e: AlterTableEvent) => clusterActor ! e.copy(myChannel = clientProperties.getMysql.getMyChannel)
+      case Some(e: RotateEvent) => clusterActor ! HeartSend(clientProperties.getMysql.getMyChannel, e)
+
       case None =>
         log.debug(s"Ignoring ${binaryLogEvent.getHeader[EventHeaderV4].getEventType} event.")
     }
@@ -58,7 +58,7 @@ class ChangeStreamEventListener(system: ActorSystem, val applicationContext: App
     */
   def getChangeEvent(event: Event): Option[ChangeEvent] = {
     val header = event.getHeader[EventHeaderV4]
-//    log.warn(s"event is ${header.getEventType}")
+    log.warn(s"event is ${header.getEventType}")
     header.getEventType match {
       case eventType if EventType.isRowMutation(eventType) =>
         getMutationEvent(event, header)

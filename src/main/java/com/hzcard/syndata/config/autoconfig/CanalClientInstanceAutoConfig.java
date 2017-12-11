@@ -23,37 +23,41 @@ public class CanalClientInstanceAutoConfig implements ApplicationListener<Embedd
     public MapDataSourceLookup initAllDataSource() {
         MapDataSourceLookup mapDataSource = new MapDataSourceLookup();
 
+        for (DestinationProperty dp : canalClientProperties.getDestinations().values()) {
+            MysqlClientProperties properties = dp.getMysql();
+            PoolProperties poolProp = new PoolProperties();
+            poolProp.setDriverClassName("com.mysql.jdbc.Driver");
+            poolProp.setUrl("jdbc:mysql://"+properties.getHost()+":"+properties.getPort()+"/mysql?useUnicode=true&characterEncoding=utf8");
+            poolProp.setUsername(properties.getUser());
+            poolProp.setPassword(properties.getPassword());
+            poolProp.setMaxActive(2);
+            poolProp.setInitialSize(1);
+            poolProp.setTestOnBorrow(true);
+            poolProp.setValidationQuery("SELECT 1");
+            poolProp.setDefaultAutoCommit(true);
+            org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource(poolProp);
+            mapDataSource.addDataSource("channel" + properties.getMyChannel(), dataSource);
+        }
+
         for (String schema : canalClientProperties.getSchemas().keySet()) {
 
-            DataSourcePro dataSourcePro = canalClientProperties.getSchemas().get(schema).getSourceDataSource();
             DataSourcePro targetDataSourcePro = canalClientProperties.getSchemas().get(schema).getTargetDataSource();
-            if (dataSourcePro != null) {
-//        		mapDataSource.addDataSource("source" + schema, DataSourceBuilder.create().driverClassName(dataSourcePro.getDriverClassName()).username(dataSourcePro.getUsername()).password(dataSourcePro.getPassword()).url(dataSourcePro.getUrl()).build());
-            	PoolProperties poolProp = new PoolProperties();
-            	poolProp.setDriverClassName(dataSourcePro.getDriverClassName());
-            	poolProp.setUrl(dataSourcePro.getUrl());
-        		poolProp.setUsername(dataSourcePro.getUsername());
-        		poolProp.setPassword(dataSourcePro.getPassword());
-        		poolProp.setMaxActive(200);
-        		poolProp.setTestOnBorrow(true);
-        		poolProp.setValidationQuery("SELECT 1");
-        		org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource(poolProp);
-        		mapDataSource.addDataSource("source" + schema, dataSource);
-            }
-            	
-            if (targetDataSourcePro != null){
-//                mapDataSource.addDataSource("target" + schema, DataSourceBuilder.create().driverClassName(targetDataSourcePro.getDriverClassName()).username(targetDataSourcePro.getUsername()).password(targetDataSourcePro.getPassword()).url(targetDataSourcePro.getUrl()).build());
+            if (targetDataSourcePro != null) {
                 PoolProperties poolProp = new PoolProperties();
-            	poolProp.setDriverClassName(targetDataSourcePro.getDriverClassName());
-            	poolProp.setUrl(targetDataSourcePro.getUrl());
-        		poolProp.setUsername(targetDataSourcePro.getUsername());
-        		poolProp.setPassword(targetDataSourcePro.getPassword());
-        		poolProp.setMaxActive(1000);
-        		poolProp.setMaxWait(60 * 1000);
+                poolProp.setDriverClassName(targetDataSourcePro.getDriverClassName());
+                poolProp.setUrl(targetDataSourcePro.getUrl());
+                poolProp.setUsername(targetDataSourcePro.getUsername());
+                poolProp.setPassword(targetDataSourcePro.getPassword());
+                poolProp.setMaxActive(5);
+                poolProp.setMaxWait(60 * 1000);
                 poolProp.setTestOnBorrow(true);
-                poolProp.setValidationQuery("SELECT 1");
-        		org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource(poolProp);
-        		mapDataSource.addDataSource("target" + schema, dataSource);
+                poolProp.setDefaultAutoCommit(true);
+                if (targetDataSourcePro.getDriverClassName().indexOf("oracle") >= 0)
+                    poolProp.setValidationQuery("select 1 from dual");
+                else
+                    poolProp.setValidationQuery("SELECT 1");
+                org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource(poolProp);
+                mapDataSource.addDataSource("target" + schema, dataSource);
             }
         }
 
@@ -63,7 +67,7 @@ public class CanalClientInstanceAutoConfig implements ApplicationListener<Embedd
 
     @Override
     public void onApplicationEvent(EmbeddedServletContainerInitializedEvent event) {
-    	CanalClientInstanceAutoConfig.serverPort = event.getEmbeddedServletContainer().getPort();
+        CanalClientInstanceAutoConfig.serverPort = event.getEmbeddedServletContainer().getPort();
     }
 
     public static int getPort() {

@@ -23,11 +23,6 @@
 
     <pluginRepositories>
         <pluginRepository>
-            <id>hzcard</id>
-            <name>hzcard</name>
-            <url>http://192.168.102.206:8900/nexus/content/groups/hzcard</url>
-        </pluginRepository>
-        <pluginRepository>
             <id>spring-release</id>
             <snapshots>
                 <enabled>false</enabled>
@@ -58,6 +53,11 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
@@ -198,11 +198,6 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.elasticsearch.plugin</groupId>
-            <artifactId>shield</artifactId>
-            <version>2.2.0</version>
-        </dependency>
-        <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-actor_2.12</artifactId>
             <version>2.5.4</version>
@@ -270,6 +265,11 @@
                     <groupId>com.google.code.findbugs</groupId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle</groupId>
+            <artifactId>ojdbc6</artifactId>
+            <version>11.2.0.4</version>
         </dependency>
     </dependencies>
 

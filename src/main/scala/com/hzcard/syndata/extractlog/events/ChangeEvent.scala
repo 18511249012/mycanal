@@ -26,11 +26,11 @@ case object BeginTransaction extends TransactionEvent
 
 case class Gtid(gtid: String) extends TransactionEvent
 
-case class CommitTransaction(binlogPosition: Long) extends TransactionEvent
+case class CommitTransaction(binlogPosition: Long, myChannel: Option[String]=None) extends TransactionEvent
 
 case class RollbackTransaction(binlogPosition: Long) extends TransactionEvent
 
-case class RotateEvent(binlogFilename: String, binlogPosition: Long) extends ChangeEvent with EventData
+case class RotateEvent(binlogFilename: String, binlogPosition: Long, myChannel: Option[String] = None) extends ChangeEvent with EventData
 
 /** Represents an ALTER TABLE statement, created from QUERY
   * event in the binlog.
@@ -42,7 +42,8 @@ case class RotateEvent(binlogFilename: String, binlogPosition: Long) extends Cha
 case class AlterTableEvent(
                             database: String,
                             tableName: String,
-                            sql: String
+                            sql: String,
+                            myChannel:String = null,
                           ) extends ChangeEvent {
   def cacheKey = (database.toLowerCase, tableName.toLowerCase)
 }
@@ -173,11 +174,13 @@ case class Column(name: String, dataType: String, isPrimary: Boolean)
   * @param columns
   */
 case class MutationWithInfo(
+
                              mutation: MutationEvent,
                              transaction: Option[TransactionInfo] = None,
                              columns: Option[ColumnsInfo] = None,
-                             mutationData:MutationData=null,
-                             formattedMessage: Option[String] = None
+                             mutationData: MutationData = null,
+                             formattedMessage: Option[String] = None,
+                             myChannel: Option[String]=None
                            )
 
 case class PositionInfo(binLogFilename: String, binLogPositon: Long)

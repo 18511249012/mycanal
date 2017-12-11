@@ -12,7 +12,6 @@ public class SchemaProperty {
      */
     private Map<String,TableRepository> tableRepository;
 
-    private DataSourcePro sourceDataSource;
 
     private DataSourcePro targetDataSource;
 
@@ -22,16 +21,15 @@ public class SchemaProperty {
 
     public String includeSynTables;
 
+    public String excludeSynTables;
+
+    /**
+     * 表名映射
+     */
+    private Map<String,String> tableNameMappings;
+
     public void setTableRepository(Map<String, TableRepository> tableRepository) {
         this.tableRepository = tableRepository;
-    }
-
-    public DataSourcePro getSourceDataSource() {
-        return sourceDataSource;
-    }
-
-    public void setSourceDataSource(DataSourcePro sourceDataSource) {
-        this.sourceDataSource = sourceDataSource;
     }
 
     public DataSourcePro getTargetDataSource() {
@@ -48,5 +46,21 @@ public class SchemaProperty {
 
     public void setTargetDataSource(DataSourcePro targetDataSource) {
         this.targetDataSource = targetDataSource;
+    }
+
+    public String getExcludeSynTables() {
+        return excludeSynTables;
+    }
+
+    public void setExcludeSynTables(String excludeSynTables) {
+        this.excludeSynTables = excludeSynTables;
+    }
+
+    public Map<String, String> getTableNameMappings() {
+        return tableNameMappings;
+    }
+
+    public void setTableNameMappings(Map<String, String> tableNameMappings) {
+        this.tableNameMappings = tableNameMappings;
     }
 }

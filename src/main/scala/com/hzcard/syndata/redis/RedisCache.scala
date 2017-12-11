@@ -21,10 +21,11 @@ class RedisCache(@Autowired val redisTemplate: RedisTemplate[Object, Object]) {
   val mutexKey = "MYCHANNELRUNING-"
   val binLogPersisterKey = "BINLOG-"
 
+  val mutexValue = InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort
+
   private def keepAlive(myChannel: String): Boolean = {
     val operation: ValueOperations[Object, Object] = redisTemplate.opsForValue()
     val key = mutexKey + myChannel
-    val mutexValue = InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort
     if (redisTemplate.hasKey(key) && {
       val value = operation.get(key).asInstanceOf[String]
       value == mutexValue
@@ -39,12 +40,11 @@ class RedisCache(@Autowired val redisTemplate: RedisTemplate[Object, Object]) {
   def clusterIsAlive(myChannel: String): Boolean = {
     val operation: ValueOperations[Object, Object] = redisTemplate.opsForValue()
     var ifSent = false
-    ifSent = operation.setIfAbsent(mutexKey + myChannel, InetAddress.getLocalHost().getHostAddress() + ":" + CanalClientInstanceAutoConfig.getPort)
-    if (!ifSent) {
-      //看看是不是自己
-      if (keepAlive(myChannel))
-        ifSent = true
-    } else
+    ifSent = operation.setIfAbsent(mutexKey + myChannel, mutexValue)
+    if (!ifSent)
+    //看看是不是自己
+      ifSent = keepAlive(myChannel)
+    else
       redisTemplate.expire(mutexKey + myChannel, 30, TimeUnit.SECONDS)
     ifSent
   }

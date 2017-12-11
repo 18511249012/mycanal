@@ -2,43 +2,52 @@ package com.hzcard.syndata.datadeal
 
 import java.util
 
-import akka.actor.SupervisorStrategy.Restart
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorRefFactory, OneForOneStrategy}
+import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorLogging, ActorRef, OneForOneStrategy}
 import akka.dispatch.{BoundedMessageQueueSemantics, RequiresMessageQueue}
 import com.alibaba.otter.canal.protocol.CanalEntry.EventType
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.hzcard.syndata.DealDataStatus
 import com.hzcard.syndata.config.autoconfig.CanalClientProperties
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.{Autowired, Qualifier}
+import org.springframework.beans.factory.config.ConfigurableBeanFactory
 import org.springframework.context.ApplicationContext
+import org.springframework.context.annotation.Scope
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository
 import org.springframework.data.util.ClassTypeInformation
+import org.springframework.stereotype.Component
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 
 /**
   * Created by zhangwei on 2017/3/6.
   */
+@Component("esDealDataActor")
+@Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+class EsDealDataActor(@Autowired
+                      applicationContext: ApplicationContext,@Autowired clientProperties:CanalClientProperties,
+                     @Autowired @Qualifier("persistorLoaderRef") getNextActor:ActorRef) extends Actor with MergeOperationArray with RequiresMessageQueue[BoundedMessageQueueSemantics] {
 
-class EsDealDataActor(getNextHop: ActorRefFactory => ActorRef,
-                      applicationContext: ApplicationContext) extends Actor with MergeOperationArray with ActorLogging with RequiresMessageQueue[BoundedMessageQueueSemantics]{
-
+  val log = LoggerFactory.getLogger(getClass)
 
   val objectMapper = new ObjectMapper()
   objectMapper.registerModule(DefaultScalaModule)
-  val clientProperties = applicationContext.getBean(classOf[CanalClientProperties])
-  val getNextActor = getNextHop(context)
 
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
     super.preRestart(reason, message)
-    log.error(reason.getMessage,reason)
+    log.error(reason.getMessage, reason)
     if (!message.isEmpty && message.get.isInstanceOf[DealDataRequestModel]) { //遇到了异常，重启的时候，重复处理数据，需要注意死循环
       dealDataRequestModel(message.get.asInstanceOf[DealDataRequestModel])
     }
   }
-//  override def supervisorStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
-//    case _: Exception                => Restart
-//  }
+
+  override def supervisorStrategy = OneForOneStrategy() {
+    case _: ActorInitializationException => Stop
+    case _: ActorKilledException => Stop
+    case _: Throwable => Restart
+  }
 
   override def receive: Receive = {
     case x: DealDataRequestModel => dealDataRequestModel(x)
@@ -53,10 +62,11 @@ class EsDealDataActor(getNextHop: ActorRefFactory => ActorRef,
     if (metaData._3) {
       val esDealDataRequest = EsDealDataRequest(metaData._4, mapToEntity(x.data._2, metaData._5), x.txId)
       dealEs(esDealDataRequest)
+      val time = System.currentTimeMillis() - startTime
+      if (log.isWarnEnabled && time > 1000)
+        log.warn(s"操作es耗时 ${x.data._1._1}.${x.data._1._2} 耗时 ${time}")
     }
-    if(log.isInfoEnabled)
-      log.info(s"操作es耗时 ${x.data._1._1}.${x.data._1._2} 耗时 ${System.currentTimeMillis() - startTime}")
-//    getNextActor ! x
+    sender ! DealDataStatus.Success
   } catch {
     case th: Throwable =>
       log.error(th.getMessage, th)
@@ -65,10 +75,10 @@ class EsDealDataActor(getNextHop: ActorRefFactory => ActorRef,
 
   def dealEs(x: EsDealDataRequest) = //处理下针对es的数组，将update操作当成insert操作合并
     try {
-      val esChangeArray = x.dataArray.map(x => if (x.eventType == EventType.UPDATE) SchemaTableMapData(x.schema, x.tableName, EventType.INSERT, x.rowChange) else x)
+      val esChangeArray = x.dataArray.map(x => if (x.eventType == EventType.UPDATE) SchemaTableMapData(x.schema, x.tableName, EventType.INSERT, x.rowChange,null,x.primaryKeys) else x)
       val newArray = merger(esChangeArray)
       newArray.foreach(data => {
-        val entitys = mapToEntity(data.get.rowChanges, x.repository).asInstanceOf[java.lang.Iterable[Object]]
+        val entitys = mapToEntity(data.get.rowChanges.toArray, x.repository).asInstanceOf[java.lang.Iterable[Object]]
         if (data.get.eventType == EventType.DELETE)
           x.repository.delete(entitys)
         else
@@ -106,13 +116,13 @@ class EsDealDataActor(getNextHop: ActorRefFactory => ActorRef,
     maps.toArray
   }
 
-  def mapToEntity(rowMap: ArrayBuffer[scala.collection.mutable.LinkedHashMap[String, java.io.Serializable]], repository: ElasticsearchRepository[Object, String]): Any = {
+  def mapToEntity(rowMap: Array[scala.collection.mutable.LinkedHashMap[String, java.io.Serializable]], repository: ElasticsearchRepository[Object, String]): Any = {
     val json = objectMapper.writeValueAsString(rowMap)
+//    log.info(s"es syn json is :${json}")
     // 获得domain
     val cT = ClassTypeInformation.from(repository.getClass)
     // 解析获得domaiin
     val arguments = cT.getSuperTypeInformation(classOf[ElasticsearchRepository[_, _ <: Serializable]]).getTypeArguments
-    //    logger.error("json="+json + " === " + arguments.get(0).getType);
     objectMapper.readValue(json, objectMapper.getTypeFactory.constructCollectionType(classOf[util.LinkedList[Object]], arguments.get(0).getType))
   }
 }

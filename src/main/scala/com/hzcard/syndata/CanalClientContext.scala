@@ -22,7 +22,7 @@ import org.springframework.util.{Assert, ClassUtils}
   */
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_SINGLETON)
-@DependsOn(Array("actorSystem","redisCache"))
+@DependsOn(Array("actorSystem", "redisCache","mapDataSource","clusterActorRef"))
 class CanalClientContext(@Autowired redis: RedisCache, @Autowired actorSystem: ActorSystem,
                          @Autowired canalClientProperties: CanalClientProperties,
                          @Autowired applicationContext: ApplicationContext) {
@@ -34,22 +34,20 @@ class CanalClientContext(@Autowired redis: RedisCache, @Autowired actorSystem: A
   private val resetEndPoint: Map[String, Class[_]] = new ConcurrentHashMap[String, Class[_]]
   private val clients: Map[String, Slaver] = new util.HashMap[String, Slaver]
 
-  @PostConstruct
-  def initIt() {
-    validate(canalClientProperties)
-    canalClientProperties.getSchemas.asScala.filter(x => x._2 != null).
-      filter(x => x._2.getTableRepository != null).
-      map(x => x._2.getTableRepository).
-      flatMap(x => x.values).
-      filter(x=>x.getRepository!=null).
-      foreach(x => {
+  validate(canalClientProperties)
+  canalClientProperties.getSchemas.asScala.filter(x => x._2 != null).
+    filter(x => x._2.getTableRepository != null).
+    map(x => x._2.getTableRepository).
+    flatMap(x => x.values).
+    filter(x => x.getRepository != null).
+    foreach(x => {
       resetEndPoint.computeIfAbsent(x.getResetEndPoint, new java.util.function.Function[String, Class[_]] {
         override def apply(t: String): Class[_] = ClassUtils.forName(x.getRepository, applicationContext.getClassLoader)
       })
     })
-    canalClientProperties.getDestinations.asScala.
-      foreach(x => clients.put(x._1, new Slaver(x._2, actorSystem, applicationContext, redis)))
-  }
+  canalClientProperties.getDestinations.asScala.
+    foreach(x => clients.put(x._1, new Slaver(x._2, actorSystem, applicationContext, redis)))
+  start()
 
   @PreDestroy
   def cleanUp(): Unit = {

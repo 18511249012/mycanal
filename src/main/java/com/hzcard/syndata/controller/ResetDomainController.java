@@ -74,10 +74,10 @@ public class ResetDomainController {
                                 conn = dataSource.getConnection();
 
                                 Statement stm = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
-                                String sql = "select * from " + schema + "." + tableName + " Order By ID ASC";
+                                String sql = "select * from " + tableName + " Order By ID ASC";
                                 if ("com.hzcard.syndata.points.repositories.OperationOrderRepository".equals(table.getRepository()) || "com.hzcard.syndata.points.repositories.OrderRepository".equals(table.getRepository()))
                                     sql = "select *,code as code_search,card_no as card_no_search from " + schema + "." + tableName + " Order By ID ASC";
-                                String sqlCount = "select count(1) from " + schema + "." + tableName;
+                                String sqlCount = "select count(1) from " + tableName;
                                 ResultSet set = stm.executeQuery(sqlCount);
                                 int dataCount = 0;
                                 while (set.next()) {

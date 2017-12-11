@@ -24,11 +24,11 @@ import mousio.etcd4j.transport.EtcdNettyClient;
 import mousio.etcd4j.transport.EtcdNettyConfig;
 
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, DataSourceTransactionManagerAutoConfiguration.class})
-@EnableElasticsearchRepositories(basePackages = "com/hzcard/syndata")
+@EnableElasticsearchRepositories(basePackages = "com.hzcard.syndata")
 @EnableTransactionManagement
 @EnableDiscoveryClient
 @ComponentScan("com.hzcard")
-public class Application implements CommandLineRunner {
+public class Application {
 
     private static final Logger logger = LoggerFactory.getLogger(Application.class);
 
@@ -52,13 +52,4 @@ public class Application implements CommandLineRunner {
         return new EtcdClient(nettyClient);
     }
 
-    @Autowired
-    CanalClientContext canalClientContext;
-
-
-    @Override
-    public void run(String... args) throws Exception {
-        logger.info("runner canalClientContext start");
-        canalClientContext.start();
-    }
 }
