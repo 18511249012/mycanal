@@ -1,0 +1,55 @@
+server:
+  port: ${port:8095}
+spring:
+  redis:
+    host: 127.0.0.1     #redis配置，用来控制集群
+    port: 6379
+    database: 0
+hzcard:
+  syndata:
+    transCacheCount: 32      #缓存多少个事务才写入redis，记录位点
+    encryptor:
+      timeOut: 500
+    destinations:
+      centremysql:                #通道名字
+        mysql: 
+          myChannel: centremysql       #通道的唯一标志。同集群内，不能有相同的。否则数据错乱
+          serverId: 21
+          keepalive: 50000
+          host: ${sourceDataSource}       #源库地址，如：127.0.0.1
+          port: 3306
+          user: mycanal                   
+          password: mycanal1117
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 0
+          preloadDatabases:
+    schemas:
+            usergrade:                      #目标库schemas
+              includeSynTables: '*'         #从元库同步那些表。*为所有表。
+              excludeSynTables: ''          # 不从源库同步那些表。优先级高
+              targetDataSource: 
+                driverClassName: oracle.jdbc.driver.OracleDriver      #写目标库要使用的jdbc驱动
+                url: jdbc:oracle:thin:@${targetDataSource}            #jdbc的url
+                username: usergrade                                   #用户名
+                password: usergradehzcard                             #密码
+            points:
+              includeSynTables: '*'
+              excludeSynTables: ''
+              tableNameMappings:                                      #table名映射。key为源库里的表名。value是 要写目标库的表名
+                tp_base_offer_param_shop_set_log: tp_base_offer_param_shop_log              
+                tp_operation_point_customer_service: tp_op_point_customer_service
+                tp_promotion_offer_entity_prop_operation_log: tp_pt_offer_entity_prop_op_log
+                tp_promotion_offer_entity_prop_prop: tp_pt_offer_entity_p_p_op_log
+                tp_promotion_offer_entity_prop_prop_operation_log: tp_pt_offer_entity_p_p_op_log
+                tp_promotion_offer_param_shop_set: tp_pt_offer_param_shop_set
+                tp_promotion_offer_param_shop_set_operation_log: tp_pt_offer_param_shop_op_log
+                tp_promotion_offer_entity_operation_log: tp_pt_offer_entity_op_log
+                tp_promotion_offer_expr_operation_log: tp_pt_offer_expr_op_log
+                tp_promotion_offer_opration_log: tp_pt_offer_op_log
+              targetDataSource: 
+                driverClassName: oracle.jdbc.driver.OracleDriver
+                url: jdbc:oracle:thin:@${targetDataSource}
+                username: points
+                password: pointshzcard

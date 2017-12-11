@@ -1,0 +1,56 @@
+server:
+  port: ${port:8095}
+spring:
+  redis:
+    host: 127.0.0.1     #redis
+    port: 6379
+    database: 0
+hzcard:
+  syndata:
+    transCacheCount: 32
+    encryptor:
+      timeOut: 500
+    destinations:
+      pro-pre-1:                #通道1名称
+        mysql:
+          myChannel: pro-pre-1    #唯一的通道1标志
+          serverId: 1191
+          keepalive: 5000
+          host: source1.database.com.cn    #通道对应的源库
+          port: 3306
+          user: test
+          password: test
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+      pro-pre-2:                   #通道2名称
+        mysql:
+          myChannel: pro-pre-2      #唯一的通道2标志
+          serverId: 1192
+          keepalive: 5000
+          host: source2.database.com.cn
+          port: 3306
+          user: test
+          password: test
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+    schemas:                            #同步的目标库配置
+            usergrade:
+              includeSynTables: '*'
+              targetDataSource: 
+                driverClassName: com.mysql.jdbc.Driver
+                url: jdbc:mysql://${targetDataSource}/usergrade?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
+                username: hzcard
+                password: Hzcard1022
+            points:
+              includeSynTables: '*'
+              targetDataSource: 
+                driverClassName: com.mysql.jdbc.Driver
+                url: jdbc:mysql://${targetDataSource}/points?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true
+                username: hzcard
+                password: Hzcard1022

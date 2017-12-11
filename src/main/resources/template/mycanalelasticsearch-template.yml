@@ -1,0 +1,79 @@
+server:
+  port: ${port:8095}
+spring:
+  data:
+    elasticsearch:
+      clusterNodes: ${es.nodes:172.16.122.185:9300}
+      clusterName: essdata.pro.my.cn
+      repositories:
+        enabled: true
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+hzcard:
+  syndata:
+    transCacheCount: 16
+    encryptor:
+      timeOut: 500
+    destinations:
+      pro-m-1e:                #通道配置
+        mysql:
+          myChannel: pro-m-1e
+          serverId: 191
+          keepalive: 5000
+          host: source1.database.com.cn
+          port: 3306
+          user: test
+          password: test
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:
+      pro-m-2e:                #通道配置
+        mysql:
+          myChannel: pro-m-2e
+          serverId: 191
+          keepalive: 5000
+          host: source2.database.com.cn
+          port: 3306
+          user: test
+          password: test
+          encryptor: false
+          includeData: true
+          preloadTimeOut: 30000
+          timeout: 5000
+          preloadDatabases:      
+    schemas:
+            reorder:
+              tableRepository:        #es的同步配置
+                re_order:             #库名称
+                  repository: com.hzcard.syndata.reorder.repositories.ReorderRepository  #库名对应的写es的Repository
+                  resetEndPoint: reorder
+                re_operation_order:
+                  repository: com.hzcard.syndata.reorder.repositories.ReoperationOrderRepository
+                  resetEndPoint: reorderOperation
+            points:
+              tableRepository:
+                tp_operation_order_main:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderRepository
+                  resetEndPoint: operationOrderRepository
+                tp_operation_order_point:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderPointRepository
+                  resetEndPoint: operationOrderPoint
+                tp_operation_order_product:
+                  repository: com.hzcard.syndata.points.repositories.OperationOrderProductRepository
+                  resetEndPoint: operationOrderProduct
+                tp_order_offer_expr:
+                  repository: com.hzcard.syndata.points.repositories.OrderOfferExprRepository
+                  resetEndPoint: orderOfferExprRepository
+                tp_order_point:
+                  repository: com.hzcard.syndata.points.repositories.OrderPointRepository
+                  resetEndPoint: orderPointRepository
+                tp_order_product:
+                  repository: com.hzcard.syndata.points.repositories.OrderProductRepository
+                  resetEndPoint: orderProductRepository
+                tp_order_main:
+                  repository: com.hzcard.syndata.points.repositories.OrderRepository
+                  resetEndPoint: orderRepository

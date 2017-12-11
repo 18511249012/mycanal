@@ -1,7 +1,7 @@
 spring:
   application:
-    #应用名称
-    name: ${app.name}
+    #应用名称，可以写死也可以使用变量
+    name: ${app.name}   
   cloud:
     config:
       #config server的地址
